@@ -15,6 +15,7 @@ import {
   normalizeEnvelope,
 } from "../envelopes/generic-envelope";
 import { applyEnvelopeToGain } from "../envelopes/apply-generic-envelope";
+import type { EnvelopeMod } from "@/lib/audio/types";
 
 /**
  * Conversion pitch MIDI → fréquence Hz.
@@ -31,24 +32,8 @@ function midiToFreq(pitch: number): number {
  *
  * - id        : identifiant stable (pour l’UI / automation)
  * - target    : "amp" (gain) ou "detune" (pitch en cents)
- * - envelope  : courbe générique (0..1 en t normalisé)
- * - enabled   : toggle de la modulation
- * - depthCents: profondeur en cents si target === "detune"
- * - name      : label lisible (UI)
- * - group     : catégorie (ex: "Amp", "Pitch")
  * - macro     : placeholder pour tie-in avec macro system
  */
-export type EnvelopeMod = {
-  id: string;
-  target: "amp" | "detune";
-  envelope: GenericEnvelope;
-  enabled?: boolean;
-  /** profondeur en cents si target=detune */
-  depthCents?: number;
-  name?: string;
-  group?: string;
-  macro?: string;
-};
 
 /**
  * SimpleSynthParams
