@@ -27,11 +27,11 @@
  *      • updateMidiClipLength(trackId, sceneIndex, lengthBeats)
  */
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useUiStore } from "@/lib/stores/ui.store";
 import { useProjectStore } from "@/lib/stores/project.store";
 import type { MidiNote } from "@/lib/audio/types";
-import { PianoRoll } from "../pianoroll/PianoRoll";
+import { PianoRoll } from "./pianoroll/PianoRoll";
 
 export const ClipEditor = memo(function ClipEditor() {
   /** Clip sélectionné côté UI (track + scène) */
@@ -49,6 +49,22 @@ export const ClipEditor = memo(function ClipEditor() {
   /** Actions projet */
   const updateNotes = useProjectStore((s) => s.updateMidiClipNotes);
   const renameClip = useProjectStore((s) => s.renameClip);
+  // Stable handlers to avoid recreations inside JSX conditionals
+  const handleChangeNotes = useCallback(
+    (notes: MidiNote[]) => {
+      if (!selected) return;
+      updateNotes(selected.trackId, selected.sceneIndex, notes);
+    },
+    [selected, updateNotes]
+  );
+
+  const handleRename = useCallback(
+    (name: string) => {
+      if (!selected) return;
+      renameClip(selected.trackId, selected.sceneIndex, name);
+    },
+    [renameClip, selected]
+  );
 
   /**
    * Résolution du clip sélectionné :
@@ -76,10 +92,6 @@ export const ClipEditor = memo(function ClipEditor() {
   return (
     <div className="mt-2 rounded-sm border border-neutral-700 bg-neutral-800 p-3">
       {!clip ? (
-        /**
-         * Cas 1 : aucun clip trouvé pour (trackId, sceneIndex)
-         * → message + bouton "Fermer"
-         */
         <div className="flex items-center justify-between">
           <div className="text-sm text-neutral-400">Aucun clip sélectionné</div>
           <button
@@ -90,19 +102,12 @@ export const ClipEditor = memo(function ClipEditor() {
           </button>
         </div>
       ) : clip.type === "midi" ? (
-        /**
-         * Cas 2 : Clip MIDI → on affiche le panneau Piano Roll
-         */
         <MidiClipPanel
           key={clip.id}
           name={clip.name ?? clip.id}
           notes={(clip.notes ?? []) as MidiNote[]}
-          onChangeNotes={(notes) =>
-            updateNotes(selected.trackId, selected.sceneIndex, notes)
-          }
-          onRename={(name) =>
-            renameClip(selected.trackId, selected.sceneIndex, name)
-          }
+          onChangeNotes={handleChangeNotes}
+          onRename={handleRename}
           onClose={close}
           trackId={selected.trackId}
           sceneIndex={selected.sceneIndex}
@@ -116,16 +121,11 @@ export const ClipEditor = memo(function ClipEditor() {
           lengthBeats={clip.lengthBeats}
         />
       ) : (
-        /**
-         * Cas 3 : Clip Audio
-         */
         <AudioClipEditor
           key={clip.id}
           initialName={clip.name ?? clip.id}
           sampleUrl={clip.sampleUrl ?? ""}
-          onRename={(name) =>
-            renameClip(selected.trackId, selected.sceneIndex, name)
-          }
+          onRename={handleRename}
           onClose={close}
         />
       )}
@@ -137,7 +137,7 @@ export const ClipEditor = memo(function ClipEditor() {
 /*                      Panneau pour clip MIDI                         */
 /* ------------------------------------------------------------------ */
 
-function MidiClipPanel({
+const MidiClipPanel = memo(function MidiClipPanel({
   name,
   notes,
   onChangeNotes,
@@ -169,6 +169,22 @@ function MidiClipPanel({
   /** Actions liées aux propriétés du clip MIDI */
   const updateClipLoop = useProjectStore((s) => s.updateClipLoop);
   const updateClipLength = useProjectStore((s) => s.updateMidiClipLength);
+
+  const handleLoopChange = useCallback(
+    (next: { start: number; end: number } | null) => {
+      updateClipLoop(trackId, sceneIndex, next);
+    },
+    [sceneIndex, trackId, updateClipLoop]
+  );
+
+  const handleLengthBlur = useCallback(
+    (e: React.FocusEvent<HTMLInputElement>) => {
+      const v = parseFloat(e.target.value);
+      if (!Number.isFinite(v)) return;
+      updateClipLength(trackId, sceneIndex, Math.max(1, v | 0));
+    },
+    [sceneIndex, trackId, updateClipLength]
+  );
 
   return (
     <div className="flex gap-3">
@@ -210,7 +226,7 @@ function MidiClipPanel({
         onChange={onChangeNotes}
         lengthBeats={lengthBeats ?? 4}
         loop={loop}
-        onLoopChange={(next) => updateClipLoop(trackId, sceneIndex, next)}
+        onLoopChange={handleLoopChange}
       />
 
       {/* Contrôle de longueur de clip en beats */}
@@ -222,17 +238,12 @@ function MidiClipPanel({
           step={1}
           className="h-6 w-20 rounded-sm border border-neutral-700 bg-neutral-800 px-1 text-[11px] text-neutral-200"
           defaultValue={lengthBeats ?? 4}
-          onBlur={(e) => {
-            const v = parseFloat(e.target.value);
-            if (!Number.isFinite(v)) return;
-            // clamp à ≥ 1, entier
-            updateClipLength(trackId, sceneIndex, Math.max(1, v | 0));
-          }}
+          onBlur={handleLengthBlur}
         />
       </div>
     </div>
   );
-}
+});
 
 /* ------------------------------------------------------------------ */
 /*                     Panneau pour clip Audio                         */
