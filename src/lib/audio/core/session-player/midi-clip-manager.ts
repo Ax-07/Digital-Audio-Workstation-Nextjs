@@ -33,6 +33,13 @@ export class MidiClipManager {
   /** Derniers paramètres appliqués par piste (JSON stringifié) */
   private _lastParams = new Map<string, string>();
 
+  private static readonly __DEV__ = typeof process !== "undefined" && process.env.NODE_ENV !== "production";
+  private devWarn(scope: string, err: unknown) {
+    if (MidiClipManager.__DEV__) {
+      console.warn(`[MidiClipManager:${scope}]`, err);
+    }
+  }
+
   /**
    * Obtient ou crée une MidiTrack pour une piste.
    */
@@ -478,7 +485,9 @@ export class MidiClipManager {
     if (clip) {
       try {
         clip.stop();
-      } catch {}
+      } catch (err) {
+        this.devWarn("stopMidiClip.clip.stop", err);
+      }
       this._activeMidi.delete(trackId);
     }
 
@@ -486,7 +495,9 @@ export class MidiClipManager {
     if (loop) {
       try {
         loop.unsub();
-      } catch {}
+      } catch (err) {
+        this.devWarn("stopMidiClip.loop.unsub", err);
+      }
       this._midiLoops.delete(trackId);
     }
 
@@ -494,7 +505,9 @@ export class MidiClipManager {
     if (mt) {
       try {
         mt.stop();
-      } catch {}
+      } catch (err) {
+        this.devWarn("stopMidiClip.mt.stop", err);
+      }
     }
   }
 
@@ -519,21 +532,27 @@ export class MidiClipManager {
     for (const [, clip] of this._activeMidi) {
       try {
         clip.stop();
-      } catch {}
+      } catch (err) {
+        this.devWarn("stopAll.clip.stop", err);
+      }
     }
     this._activeMidi.clear();
 
     for (const [, loop] of this._midiLoops) {
       try {
         loop.unsub();
-      } catch {}
+      } catch (err) {
+        this.devWarn("stopAll.loop.unsub", err);
+      }
     }
     this._midiLoops.clear();
 
     for (const [, mt] of this._midiTracks) {
       try {
         mt.stop();
-      } catch {}
+      } catch (err) {
+        this.devWarn("stopAll.mt.stop", err);
+      }
     }
   }
 
@@ -545,5 +564,22 @@ export class MidiClipManager {
     this._midiTracks.clear();
     this._lastKind.clear();
     this._lastParams.clear();
+  }
+
+  /**
+   * Retourne les trackIds qui ont un clip MIDI actif (one-shot ou loop).
+   */
+  getActiveTrackIds(): string[] {
+    const ids = new Set<string>();
+    for (const k of this._activeMidi.keys()) ids.add(k);
+    for (const k of this._midiLoops.keys()) ids.add(k);
+    return [...ids];
+  }
+
+  /**
+   * Retourne tous les trackIds qui possèdent une MidiTrack instanciée.
+   */
+  getAllMidiTracks(): string[] {
+    return [...this._midiTracks.keys()];
   }
 }
