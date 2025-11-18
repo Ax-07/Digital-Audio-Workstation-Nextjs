@@ -1,7 +1,4 @@
-import type { MidiNote } from "@/lib/audio/types";
-
-// GridValue: matches PianoRoll grid options (note subdivisions per whole note)
-export type GridValue = 4 | 8 | 12 | 16 | 24 | 32;
+import type { MidiNote, GridValue } from "@/lib/audio/types";
 
 /** Quantize an array of MidiNote.
  * Rounds time and duration to nearest grid step.
