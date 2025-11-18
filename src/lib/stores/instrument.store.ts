@@ -1,17 +1,7 @@
 // src/lib/stores/instrument.store.ts
 
 import { create } from "zustand/react";
-
-/**
- * Types d’instruments disponibles pour une piste MIDI :
- * - "simple-synth" : synthé basique (1 oscillateur)
- * - "dual-synth"   : synthé plus avancé (2 oscillateurs)
- * - "sampler"      : instrument basé sur échantillons
- *
- * Ce store ne gère que le type d’instrument associé à chaque piste.
- * L’audio réel est géré par l’audio-engine/library.
- */
-export type InstrumentKind = "simple-synth" | "dual-synth" | "sampler";
+import type { InstrumentKind } from "@/lib/audio/types";
 
 /**
  * État d’association piste → instrument.
