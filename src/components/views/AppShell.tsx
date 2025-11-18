@@ -48,16 +48,16 @@ const AppShellComponent = () => {
         <SidebarRight />
       </SidebarProvider>
       {/* Bottom device panel */}
-      <Accordion type="single" collapsible defaultValue="item-1" orientation="horizontal" >
+      {/* <Accordion type="single" collapsible defaultValue="item-1" orientation="horizontal" >
         <AccordionItem value="item-1">
           <AccordionTrigger className="flex items-center justify-center bg-neutral-700"/>
-          <AccordionContent>
+          <AccordionContent> */}
             <footer className="border-t border-neutral-700 bg-neutral-900 p-3">
               <BottomPanel />
             </footer>
-          </AccordionContent>
+          {/* </AccordionContent>
         </AccordionItem>
-      </Accordion>
+      </Accordion> */}
     </div>
   );
 };
