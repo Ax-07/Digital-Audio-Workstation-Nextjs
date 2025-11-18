@@ -1,7 +1,8 @@
 // src/lib/stores/dual-synth.store.ts
 
 import { create } from "zustand/react";
-import type { DualSynthParams, EnvelopeMod } from "@/lib/audio/sources/dual-osc-synth";
+import type { DualSynthParams } from "@/lib/audio/sources/dual-osc-synth";
+import type { EnvelopeMod } from "@/lib/audio/types";
 import { normalizeEnvelope } from "@/lib/audio/envelopes/generic-envelope";
 
 export type DualSynthState = {
