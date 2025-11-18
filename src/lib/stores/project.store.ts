@@ -498,7 +498,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         const playing = useUiStore.getState().playingCells;
         const isThisPlaying = !!playing[`${trackId}:${sceneIndex}`];
         if (isThisPlaying) {
-          import("@/lib/audio/core/session-player-refactored")
+          import("@/lib/audio/core/session-player")
             .then(({ getSessionPlayer }) => getSessionPlayer().refreshActiveMidiLoop(trackId, sceneIndex))
             .catch(() => {});
         }
@@ -522,7 +522,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
           const playing = useUiStore.getState().playingCells;
           const isThisPlaying = !!playing[`${trackId}:${sceneIndex}`];
           if (isThisPlaying) {
-            import("@/lib/audio/core/session-player-refactored")
+            import("@/lib/audio/core/session-player")
               .then(({ getSessionPlayer }) => {
                 try {
                   getSessionPlayer().refreshActiveMidiLoop(trackId, sceneIndex);
