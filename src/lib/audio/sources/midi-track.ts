@@ -33,11 +33,7 @@ import {
 } from "@/lib/audio/sources/dual-osc-synth";
 import { Sampler } from "@/lib/audio/sources/sampler";
 import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
-
-export type MidiInstrumentKind =
-  | "simple-synth"
-  | "dual-synth"
-  | "sampler";
+import type { InstrumentKind } from "@/lib/audio/types";
 
 export class MidiTrack {
   readonly id: string;
@@ -46,7 +42,7 @@ export class MidiTrack {
   private destination: AudioNode | null = null;
 
   /** Instrument actuellement actif. */
-  private kind: MidiInstrumentKind = "simple-synth";
+  private kind: InstrumentKind = "simple-synth";
 
   /** Instances des instruments (seul un est actif à la fois). */
   private synth: SimpleSynth | null = null;
