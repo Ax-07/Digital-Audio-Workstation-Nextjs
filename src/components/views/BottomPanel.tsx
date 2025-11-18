@@ -4,14 +4,15 @@ import { memo } from "react";
 import { useUiStore } from "@/lib/stores/ui.store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FxRack } from "@/components/daw/FxRack";
-import { AutomationEditor } from "@/components/daw/automation/AutomationEditor";
+// import { AutomationEditor } from "@/components/daw/automation/AutomationEditor";
 import { SimpleSynthPanel } from "@/components/instruments/SimpleSynthPanel";
 import { ensureLiveInputStarted, stopLiveInput } from "@/lib/audio/sources/input-device";
 import { useEffect, useState } from "react";
 import { DualSynthPanel } from "@/components/instruments/DualSynthPanel";
 import { useInstrumentStore } from "@/lib/stores/instrument.store";
-import { ClipEditor } from "../daw/controls/clip-editor/ClipEditor";
+// import { ClipEditor } from "../daw/controls/clip-editor/ClipEditor";
 import { MidiClipEditor } from "../daw/controls/clip-editor/MidiClipEditor";
+import { InstrumentKind } from "@/lib/audio/types";
 
 const BottomPanelComponent = () => {
   const selectedId = useUiStore((s) => s.selectedTrackId);
@@ -82,14 +83,14 @@ const LiveMidiSection = ({ trackId }: { trackId: string }) => {
   );
 };
 
-const DeviceSelector = ({ trackId, kind, onChange }: { trackId: string; kind: "simple-synth" | "dual-synth" | "sampler"; onChange: (k: any) => void }) => {
+const DeviceSelector = ({ trackId, kind, onChange }: { trackId: string; kind: "simple-synth" | "dual-synth" | "sampler"; onChange: (k: InstrumentKind) => void }) => {
   return (
     <div className="rounded-sm border border-neutral-700 bg-neutral-900 p-2">
       <div className="mb-1 text-[10px] uppercase tracking-widest text-neutral-400">Device</div>
       <select
         className="h-7 rounded-sm border border-neutral-700 bg-neutral-950 px-2 text-sm text-neutral-200"
         value={kind}
-        onChange={(e) => onChange(e.target.value as any)}
+        onChange={(e) => onChange(e.target.value as InstrumentKind)}
       >
         <option value="simple-synth">Simple Synth</option>
         <option value="dual-synth">Dual Osc Synth</option>
