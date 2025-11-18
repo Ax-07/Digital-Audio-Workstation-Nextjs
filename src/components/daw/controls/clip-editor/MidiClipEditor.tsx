@@ -35,11 +35,11 @@
  *      • updateMidiClipLength(trackId, sceneIndex, lengthBeats)
  */
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "@/lib/stores/project.store";
 import type { MidiNote } from "@/lib/audio/types";
 import { useUiStore } from "@/lib/stores/ui.store";
-import { PianoRoll } from "./PianoRoll";
+import { PianoRoll } from "./pianoroll/PianoRoll";
 import { useTransportScheduler } from "@/lib/audio/core/transport-scheduler";
 
 // 👇 petit hook interne pour suivre le beat global
@@ -77,23 +77,21 @@ function computeClipLocalBeat(globalBeat: number, loopStart: number, loopEnd: nu
 }
 
 export const MidiClipEditor = memo(function MidiClipEditor() {
-  /** Clip sélectionné côté UI (track + scène) */
+  // UI store
   const selected = useUiStore((s) => s.selectedClip);
-  /** Synchronise la piste sélectionnée globale (utile pour MIDI live, etc.) */
   const setSelectedTrack = useUiStore((s) => s.setSelectedTrack);
+  const playingCells = useUiStore((s) => s.playingCells);
 
-  /** Session complète du projet : scènes + clips */
+  // Project store
   const session = useProjectStore((s) => s.project.session);
-
-  /** Suivi du beat global */
-  const globalBeat = useGlobalBeatFloat(); // 👈 ici
-
-  /** Actions projet */
   const renameClip = useProjectStore((s) => s.renameClip);
   const updateClipLoop = useProjectStore((s) => s.updateClipLoop);
   const updateClipLength = useProjectStore((s) => s.updateMidiClipLength);
   const updateMidiClipNotes = useProjectStore((s) => s.updateMidiClipNotes);
   const setClipStartOffset = useProjectStore((s) => s.setClipStartOffset);
+
+  /** Suivi du beat global */
+  const globalBeat = useGlobalBeatFloat();
 
   /**
    * Résolution du clip sélectionné :
@@ -107,9 +105,10 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
     return sc.clips[selected.trackId] ?? null;
   }, [session, selected]);
 
-  const isPlaying = useUiStore((s) =>
-    clip ? !!s.playingCells[`${selected?.trackId}:${selected?.sceneIndex}`] : false
-  );
+  const isPlaying = useMemo(() => {
+    if (!clip || !selected) return false;
+    return !!playingCells[`${selected.trackId}:${selected.sceneIndex}`];
+  }, [clip, playingCells, selected]);
 
   // Option : si tu as plusieurs types de clip (audio / midi)
   const midiClip = useMemo(() => {
@@ -134,51 +133,80 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
     if (selected?.trackId != null) setSelectedTrack(selected.trackId);
   }, [selected, setSelectedTrack]);
 
-  /** Si aucun clip n’est sélectionné, ne rien afficher. */
-  if (!selected || !clip) return null;
-
   const lengthBeats = midiClip?.lengthBeats ?? 4;
 
   // Valeurs dérivées pour la loop et la position
-  const loopStart = clip.loopStart ?? 0;
-  const loopEnd = clip.loopEnd ?? lengthBeats;
+  const loopStart = clip?.loopStart ?? 0;
+  const loopEnd = clip?.loopEnd ?? lengthBeats;
 
   // Position = offset de départ de lecture dans le clip
-  const position = clip.startOffset ?? loopStart;
+  const position = clip?.startOffset ?? loopStart;
 
-  const loop = clip.loopStart != null && clip.loopEnd != null ? { start: clip.loopStart, end: clip.loopEnd } : null;
+  const loop = clip && clip.loopStart != null && clip.loopEnd != null ? { start: clip.loopStart, end: clip.loopEnd } : null;
 
   // 👇 calcul du playhead local dans le clip (en beats clip-local)
   const localPlayheadBeat = isPlaying ? computeClipLocalBeat(globalBeat, loopStart, loopEnd, position) : null;
 
-  const handleLoopStartChange = (value: number) => {
-    const end = loopEnd;
-    updateClipLoop(selected.trackId, selected.sceneIndex, {
-      start: value,
-      end,
-    });
-  };
+  const handleLoopStartChange = useCallback(
+    (value: number) => {
+      if (!selected) return;
+      updateClipLoop(selected.trackId, selected.sceneIndex, { start: value, end: loopEnd });
+    },
+    [loopEnd, selected, updateClipLoop]
+  );
 
-  const handleLoopEndChange = (value: number) => {
-    const start = loopStart;
-    updateClipLoop(selected.trackId, selected.sceneIndex, {
-      start,
-      end: value,
-    });
-  };
+  const handleLoopEndChange = useCallback(
+    (value: number) => {
+      if (!selected) return;
+      updateClipLoop(selected.trackId, selected.sceneIndex, { start: loopStart, end: value });
+    },
+    [loopStart, selected, updateClipLoop]
+  );
 
   // Position = startOffset, offset de lecture dans la loop/clip
-  const handlePositionChange = (value: number) => {
-    // ici on peut clamp dans [loopStart, loopEnd) si tu veux coller à Ableton,
-    // pour l’instant on reste simple :
-    const safe = Number.isFinite(value) ? value : 0;
-    setClipStartOffset(selected.trackId, selected.sceneIndex, safe);
-  };
+  const handlePositionChange = useCallback(
+    (value: number) => {
+      if (!selected) return;
+      const safe = Number.isFinite(value) ? value : 0;
+      setClipStartOffset(selected.trackId, selected.sceneIndex, safe);
+    },
+    [selected, setClipStartOffset]
+  );
+
+  // Stable handlers for PianoRoll
+  const onNotesChange = useCallback(
+    (notes: MidiNote[]) => {
+      if (!selected) return;
+      updateMidiClipNotes(selected.trackId, selected.sceneIndex, notes);
+    },
+    [selected, updateMidiClipNotes]
+  );
+
+  const onDraftChange = useCallback(
+    async (notes: MidiNote[]) => {
+      if (!selected) return;
+      try {
+        const mod = await import("@/lib/audio/core/session-player");
+        mod.getSessionPlayer().applyMidiDraft(selected.trackId, selected.sceneIndex, notes);
+      } catch {}
+    },
+    [selected]
+  );
+
+  const onLoopChange = useCallback(
+    (next: { start: number; end: number } | null) => {
+      if (!selected) return;
+      updateClipLoop(selected.trackId, selected.sceneIndex, next);
+    },
+    [selected, updateClipLoop]
+  );
 
   return (
     <section id="midi-clip" className="flex gap-1 h-60">
-      {/* Panneau d'infos à gauche */}
-      <div className="flex flex-col gap-2 justify-between border p-2 w-56">
+      {(!selected || !clip) ? null : (
+        <>
+        {/* Panneau d'infos à gauche */}
+        <div className="flex flex-col gap-2 justify-between border p-2 w-56">
         <span className="text-xs tracking-wider text-neutral-400">Midi</span>
 
         {/* Nom du clip */}
@@ -186,7 +214,7 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
           <input
             value={localName}
             onChange={(e) => setLocalName(e.target.value)}
-            onBlur={() => renameClip(selected.trackId, selected.sceneIndex, localName)}
+            onBlur={() => selected && renameClip(selected.trackId, selected.sceneIndex, localName)}
             className="flex-1 bg-neutral-700 px-1 py-0.5 text-sm text-white outline-none ring-0 placeholder:text-neutral-500 focus:ring-2 focus:ring-neutral-500"
             placeholder="Nom du clip"
           />
@@ -203,15 +231,11 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
                 loop ? "bg-green-600 text-white" : "bg-neutral-700 text-neutral-300"
               }`}
               onClick={() => {
+                if (!selected) return;
                 if (loop) {
-                  // Désactivation du loop
                   updateClipLoop(selected.trackId, selected.sceneIndex, null);
                 } else {
-                  // Réactivation du loop : par défaut 4 bars
-                  updateClipLoop(selected.trackId, selected.sceneIndex, {
-                    start: 0,
-                    end: 4,
-                  });
+                  updateClipLoop(selected.trackId, selected.sceneIndex, { start: 0, end: 4 });
                 }
               }}
             >
@@ -264,35 +288,32 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
             className="w-16 bg-neutral-900 px-1 py-0.5 text-xs text-white outline-none ring-0 placeholder:text-neutral-500 focus:ring-2 focus:ring-neutral-500"
             value={lengthBeats}
             step={1}
-            onChange={(e) => updateClipLength(selected.trackId, selected.sceneIndex, Number(e.target.value))}
+            onChange={(e) => selected && updateClipLength(selected.trackId, selected.sceneIndex, Number(e.target.value))}
           />
         </div>
-      </div>
+        </div>
 
-      {/* Zone principale : Piano Roll */}
-      {midiClip ? (
-        <div className="flex-1 border bg-neutral-900 relative h-full">
-          <div className="bg-red-300 h-10"></div>
-          <PianoRoll
-            notes={midiClip.notes as MidiNote[]}
-            lengthBeats={lengthBeats}
-            onChange={(notes) => updateMidiClipNotes(selected.trackId, selected.sceneIndex, notes)}
-            onDraftChange={async (notes) => {
-              try {
-                const mod = await import("@/lib/audio/core/session-player");
-                mod.getSessionPlayer().applyMidiDraft(selected.trackId, selected.sceneIndex, notes);
-              } catch {}
-            }}
-            loop={loop}
-            onLoopChange={(next) => updateClipLoop(selected.trackId, selected.sceneIndex, next)}
-            position={position}
-            playheadBeat={localPlayheadBeat ?? undefined}
-            followPlayhead={isPlaying}
-            active={isPlaying}
-          />
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-xs text-neutral-500 border">Clip non MIDI</div>
+        {/* Zone principale : Piano Roll */}
+        {midiClip ? (
+          <div className="flex-1 border bg-neutral-900 relative h-full">
+            <div className="bg-red-300 h-10"></div>
+            <PianoRoll
+              notes={(midiClip?.notes ?? []) as MidiNote[]}
+              lengthBeats={lengthBeats}
+              onChange={onNotesChange}
+              onDraftChange={onDraftChange}
+              loop={loop}
+              onLoopChange={onLoopChange}
+              position={position}
+              playheadBeat={localPlayheadBeat ?? undefined}
+              followPlayhead={isPlaying}
+              active={isPlaying}
+            />
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-xs text-neutral-500 border">Clip non MIDI</div>
+        )}
+        </>
       )}
     </section>
   );
