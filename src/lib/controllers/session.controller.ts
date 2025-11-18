@@ -1,7 +1,7 @@
 // src/lib/controllers/session.controller.ts
 
 import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
-import { getSessionPlayer } from "@/lib/audio/core/session-player-refactored";
+import { getSessionPlayer } from "@/lib/audio/core/session-player";
 import { useProjectStore } from "@/lib/stores/project.store";
 import { useUiStore } from "@/lib/stores/ui.store";
 import type { ClipDecl, ProjectDecl } from "@/lib/audio/types";
