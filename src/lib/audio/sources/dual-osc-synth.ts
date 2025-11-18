@@ -7,6 +7,7 @@ import {
   getEnvelopeTotalSec,
 } from "@/lib/audio/envelopes/generic-envelope";
 import { applyEnvelopeToGain } from "@/lib/audio/envelopes/apply-generic-envelope";
+import type { EnvelopeMod } from "@/lib/audio/types";
 
 /**
  * Conversion MIDI → fréquence en Hz.
@@ -34,22 +35,8 @@ function midiToFreq(pitch: number): number {
  *    - "mix"      : crossfade A/B (0..1) modulé dans le temps
  *
  * - envelope   : GenericEnvelope normalisée (t 0..1, totalMs, courbes, etc.)
- * - depthCents : profondeur (en cents) pour les cibles de type detune*
- * - depthMix   : profondeur (ajoutée au mix de base) pour target="mix"
- * - enabled    : permet d’activer/désactiver la modulation sans la perdre
- * - name/group/macro : infos pour l’UI et un futur système de macros
+ * - name/group/macro : infos pour l'UI et un futur système de macros
  */
-export type EnvelopeMod = {
-  id: string;
-  target: "amp" | "detune" | "detuneA" | "detuneB" | "mix"; // "detune" conservé comme alias legacy de "detuneB"
-  envelope: GenericEnvelope;
-  enabled?: boolean;
-  depthCents?: number; // profondeur modulation detune si target=detune*
-  depthMix?: number; // profondeur modulation du mix (ajoutée à mix: -1..1)
-  name?: string;
-  group?: string;
-  macro?: string;
-};
 
 /**
  * DualSynthParams
