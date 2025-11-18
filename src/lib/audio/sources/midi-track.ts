@@ -3,7 +3,7 @@
 /**
  * MidiTrack
  * =========
- * Représente une piste MIDI dans ton DAW.
+ * Représente une piste MIDI.
  *
  * Rôle :
  *   - Router l'audio vers le MixerCore
@@ -64,7 +64,7 @@ export class MidiTrack {
   constructor(
     trackId: string,
     opts?: {
-      instrument?: MidiInstrumentKind;
+      instrument?: InstrumentKind;
       synthParams?: SimpleSynthParams | DualSynthParams;
       sampler?: Sampler;
     },
@@ -126,7 +126,7 @@ export class MidiTrack {
    * L’ancien instrument est abandonné, le nouveau est instancié.
    */
   setInstrument(
-    kind: MidiInstrumentKind,
+    kind: InstrumentKind,
     opts?: { synthParams?: SimpleSynthParams; sampler?: Sampler },
   ): void {
     this.kind = kind;
