@@ -16,7 +16,7 @@ export function quantizeNotes(notes: ReadonlyArray<MidiNote>, grid: GridValue, s
     const targetDur = Math.max(step, Math.round(n.duration / step) * step);
     const qDurBase = n.duration + (targetDur - n.duration) * strength;
     const qDur = Math.max(step, qDurBase);
-    out[i] = { pitch: n.pitch, time: Math.max(0, qTime), duration: qDur, velocity: n.velocity };
+    out[i] = { id: n.id, pitch: n.pitch, time: Math.max(0, qTime), duration: qDur, velocity: n.velocity };
   }
   return out;
 }
