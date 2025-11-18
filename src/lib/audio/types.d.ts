@@ -195,7 +195,7 @@ export type SessionViewDecl = {
 };
 
 /**
- * Déclaration d’une note MIDI.
+ * Déclaration d'une note MIDI.
  * - pitch : numéro de note 0..127 (MIDI)
  * - time : position de départ en beats (relative au début du clip)
  * - duration : durée de la note en beats
@@ -208,3 +208,48 @@ export type MidiNote = {
   readonly duration: number;  // en beats
   readonly velocity?: number; // 0..1
 };
+
+// ---- Envelopes & Modulation ----
+
+/**
+ * Type d'instrument MIDI disponible.
+ * Source unique de vérité pour tous les types d'instruments du DAW.
+ */
+export type InstrumentKind = "simple-synth" | "dual-synth" | "sampler";
+
+/**
+ * Modulation par envelope générique.
+ * Compatible avec simple-synth et dual-synth.
+ * 
+ * - id         : identifiant unique de la modulation
+ * - target     : paramètre cible de la modulation
+ *   - "amp"      : amplitude (volume)
+ *   - "detune"   : détune global (alias legacy pour detuneB)
+ *   - "detuneA"  : détune de l'oscillateur A (dual-synth uniquement)
+ *   - "detuneB"  : détune de l'oscillateur B (dual-synth uniquement)
+ *   - "mix"      : balance entre oscillateurs (dual-synth uniquement)
+ * - envelope   : courbe d'envelope (GenericEnvelope)
+ * - enabled    : active/désactive la modulation sans la supprimer
+ * - depthCents : profondeur en cents pour les cibles de type detune*
+ * - depthMix   : profondeur pour la modulation du mix (-1..1, dual-synth uniquement)
+ * - name       : label lisible pour l'UI
+ * - group      : catégorie pour organisation UI (ex: "Amp", "Pitch", "Mix")
+ * - macro      : placeholder pour système de macros futur
+ */
+export type EnvelopeMod = {
+  readonly id: string;
+  readonly target: "amp" | "detune" | "detuneA" | "detuneB" | "mix";
+  readonly envelope: import("@/lib/audio/envelopes/generic-envelope").GenericEnvelope;
+  readonly enabled?: boolean;
+  readonly depthCents?: number;
+  readonly depthMix?: number;
+  readonly name?: string;
+  readonly group?: string;
+  readonly macro?: string;
+};
+
+/**
+ * Valeurs de grille disponibles pour le Piano Roll et l'édition MIDI.
+ * Représente la subdivision rythmique (4 = 1/4, 16 = 1/16, etc.)
+ */
+export type GridValue = 4 | 8 | 12 | 16 | 24 | 32;
