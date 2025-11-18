@@ -19,6 +19,13 @@ export class AudioClipManager {
   /** Clips audio actuellement actifs par trackId */
   private _activeAudio = new Map<string, ActiveClip>();
 
+  private static readonly __DEV__ = typeof process !== "undefined" && process.env.NODE_ENV !== "production";
+  private devWarn(scope: string, err: unknown) {
+    if (AudioClipManager.__DEV__) {
+      console.warn(`[AudioClipManager:${scope}]`, err);
+    }
+  }
+
   /**
    * S'assure qu'un SampleSource est disponible pour (trackId, clipId, sampleUrl).
    * - Si pas présent dans le pool, on l'instancie et on charge le buffer.
@@ -75,7 +82,9 @@ export class AudioClipManager {
     if (clip) {
       try {
         clip.stop();
-      } catch {}
+      } catch (err) {
+        this.devWarn("stopAudioClip.clip.stop", err);
+      }
       this._activeAudio.delete(trackId);
     }
   }
@@ -88,7 +97,9 @@ export class AudioClipManager {
     if (clip && clip.stopAt) {
       try {
         clip.stopAt(whenSec);
-      } catch {}
+      } catch (err) {
+        this.devWarn("scheduleStopAudioClip.clip.stopAt", err);
+      }
     }
   }
 
@@ -106,7 +117,9 @@ export class AudioClipManager {
     for (const [, clip] of this._activeAudio) {
       try {
         clip.stop();
-      } catch {}
+      } catch (err) {
+        this.devWarn("stopAll.clip.stop", err);
+      }
     }
     this._activeAudio.clear();
   }
@@ -136,5 +149,12 @@ export class AudioClipManager {
   dispose(): void {
     this.stopAll();
     this._pool.clear();
+  }
+
+  /**
+   * Retourne les trackIds qui ont un clip audio actif.
+   */
+  getActiveTrackIds(): string[] {
+    return [...this._activeAudio.keys()];
   }
 }
