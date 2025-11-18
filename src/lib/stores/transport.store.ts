@@ -26,7 +26,7 @@ import { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
 import { MixerCore } from "@/lib/audio/core/mixer";
 import { useProjectStore } from "@/lib/stores/project.store";
-import { getSessionPlayer } from "@/lib/audio/core/session-player-refactored";
+import { getSessionPlayer } from "@/lib/audio/core/session-player";
 
 /**
  * État du transport global :
