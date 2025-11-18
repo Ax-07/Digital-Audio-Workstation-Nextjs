@@ -9,7 +9,7 @@ import { memo, useEffect } from "react";
 import { BottomPanel } from "./BottomPanel";
 import { SessionView } from "../daw/session/SessionView";
 import { ArrangementView } from "../daw/arrangement/ArrangementView";
-import { getSessionPlayer } from "@/lib/audio/core/session-player-refactored";
+import { getSessionPlayer } from "@/lib/audio/core/session-player";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { HeaderTransport } from "./HeaderTransport";
 
