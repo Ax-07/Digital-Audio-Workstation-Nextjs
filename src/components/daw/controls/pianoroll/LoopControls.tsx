@@ -3,8 +3,7 @@
 "use client";
 
 import { memo } from "react";
-
-export type GridValue = 4 | 8 | 12 | 16 | 24 | 32;
+import type { GridValue } from "@/lib/audio/types";
 
 export type LoopRange = { start: number; end: number } | null;
 
