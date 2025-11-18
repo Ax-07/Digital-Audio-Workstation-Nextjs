@@ -279,7 +279,7 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
             onChange={(notes) => updateMidiClipNotes(selected.trackId, selected.sceneIndex, notes)}
             onDraftChange={async (notes) => {
               try {
-                const mod = await import("@/lib/audio/core/session-player-refactored");
+                const mod = await import("@/lib/audio/core/session-player");
                 mod.getSessionPlayer().applyMidiDraft(selected.trackId, selected.sceneIndex, notes);
               } catch {}
             }}
