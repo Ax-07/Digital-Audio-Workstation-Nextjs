@@ -8,10 +8,15 @@ export type GridDrawOptions = {
   pxPerBeat: number;
   grid: number;
   timeToX: (beat: number) => number;
+  pxPerSemitone: number;
+  scrollY: number; // vertical scroll in pixels
+  minPitch: number;
+  maxPitch: number;
+  pitchToY: (pitch: number) => number; // local (already translated) pitch→y
 };
 
 export function drawGrid(ctx: CanvasRenderingContext2D, opts: GridDrawOptions) {
-  const { wCss, hCss, keyWidth, pxPerBeat, grid, timeToX } = opts;
+  const { wCss, hCss, keyWidth, pxPerBeat, grid, timeToX, pxPerSemitone, minPitch, maxPitch, pitchToY } = opts;
 
   ctx.save();
 
@@ -44,15 +49,15 @@ export function drawGrid(ctx: CanvasRenderingContext2D, opts: GridDrawOptions) {
     ctx.stroke();
   }
 
-  // Horizontal pitch lines
-  const pitchRowHeight = 14; // approximation, should match pxPerSemitone
-  const rows = Math.ceil(hCss / pitchRowHeight);
-  for (let i = 0; i <= rows; i++) {
-    const y = i * pitchRowHeight;
+  // Horizontal pitch lines using pitchToY for perfect alignment with notes & keyboard.
+  for (let pitch = minPitch; pitch <= maxPitch; pitch++) {
+    const rowTop = pitchToY(pitch); // already local (global - contentY)
+    // Only draw if visible.
+    if (rowTop + pxPerSemitone < 0 || rowTop > hCss) continue;
     ctx.strokeStyle = "#202028";
     ctx.beginPath();
-    ctx.moveTo(0, y + 0.5);
-    ctx.lineTo(wCss - keyWidth, y + 0.5);
+    ctx.moveTo(0, rowTop + 0.5);
+    ctx.lineTo(wCss - keyWidth, rowTop + 0.5);
     ctx.stroke();
   }
 
