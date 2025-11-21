@@ -1,6 +1,6 @@
 // src/components/daw/controls/clip-editor/pianoroll/types.ts
 
-import type { MidiNote } from "@/lib/audio/types";
+import type { GridValue, MidiNote } from "@/lib/audio/types";
 
 export type DraftNote = MidiNote & { __id: number };
 
@@ -12,20 +12,35 @@ export type PianoRollProps = {
   loop?: { start: number; end: number } | null;
   onLoopChange?: (loop: { start: number; end: number } | null) => void;
   position?: number; // en beats, offset de lecture
-  playheadBeat?: number;
+  getPlayheadBeat?: () => number | null;
+  onSeek?: (beat: number) => void;
+  onLengthChange?: (beats: number) => void;
+  onPositionChange?: (beat: number) => void;
   followPlayhead?: boolean;
   active?: boolean;
 
   // Contrôles optionnels (controlled/uncontrolled)
-  grid?: 4 | 8 | 16 | 32;
-  onGridChange?: (next: 4 | 8 | 16 | 32) => void;
+  grid?: GridValue;
+  onGridChange?: (next: GridValue) => void;
   snap?: boolean;
   onSnapChange?: (next: boolean) => void;
   pxPerBeat?: number; // 16–192 recommandé
   onPxPerBeatChange?: (next: number) => void;
+
+  // Identifiant de la piste pour preview MIDI
+  trackId?: string;
 };
 
-export type DragMode = null | "move" | "resize" | "rectangleSelection" | "loopStart" | "loopEnd" | "loopMove";
+export type DragMode =
+  | null
+  | "move"
+  | "resize"
+  | "rectangleSelection"
+  | "loopStart"
+  | "loopEnd"
+  | "loopMove"
+  | "setPlayhead"
+  | "resizeClip";
 
 export type CursorType = "default" | "pointer" | "ew-resize" | "crosshair";
 
@@ -36,6 +51,7 @@ export type PointerStartState = {
   initial: DraftNote[];
   loopStart?: number;
   loopEnd?: number;
+  initialLength?: number;
 } | null;
 
 export type RectangleSelectionState = {
@@ -65,4 +81,27 @@ export type PerfStats = {
   visible: number;
   total: number;
   lastUpdate: number;
+};
+
+export type InteractionState = {
+  pressedKey: number | null;
+  hoverPitch: number | null;
+  hoverNote: number | null;
+  ghost: { time: number; pitch: number } | null;
+  pointerStart: PointerStartState;
+  rectangleSelection: RectangleSelectionState;
+  dragGuide: { xCss: number; yCss: number; beat: number; pitch: number } | null;
+  loopDrag:
+    | {
+        kind: "start" | "end" | "move";
+        x0: number;
+        initial: { start: number; end: number };
+      }
+    | null;
+  /** Liste des indices de notes sélectionnées */
+  selected: number[];
+  /** Mode de drag actif (move, resize, loop...) */
+  dragMode: DragMode;
+  /** Curseur courant (CSS) */
+  cursor: CursorType;
 };

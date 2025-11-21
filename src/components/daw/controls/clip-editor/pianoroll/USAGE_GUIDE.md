@@ -1,307 +1,247 @@
-# 🎹 Piano Roll – Guide d'Utilisation
+# 🎹 Piano Roll – Guide d'Utilisation (API Complète & Perf)
 
-## 📖 Import et Utilisation Basique
+Ce guide reflète l'implémentation actuelle du composant `PianoRoll` (voir `PianoRoll.tsx`). Il corrige les divergences de l'ancien guide (création par double‑click, gestion des loops, clip length, position offset, callbacks draft vs commit).
+
+---
+
+## 📖 Import & Exemple Minimal
 
 ```tsx
-import { PianoRoll } from "@/components/daw/controls/clip-editor/PianoRoll";
+import { PianoRoll } from "@/components/daw/controls/clip-editor/pianoroll/PianoRoll";
 
-// Dans votre composant
 <PianoRoll
-  notes={midiNotes}
-  onChange={(updatedNotes) => {
-    // Sauvegarde des modifications
-    updateClipNotes(updatedNotes);
-  }}
-  lengthBeats={16}
-  loop={{ start: 0, end: 4 }}
-  playheadBeat={currentBeat}
-  active={isPlaying}
+  notes={clip.notes}
+  lengthBeats={clip.lengthBeats}
+  loop={clip.loop}
+  position={clip.offsetBeats} // offset du clip si utilisé
+  playheadBeat={transport.positionBeats - clip.offsetBeats}
+  active={transport.isPlaying}
   followPlayhead={true}
-/>
+  onChange={(finalNotes) => updateClip(clip.id, { notes: finalNotes })}
+  onDraftChange={(draftNotes) => setLivePreview(draftNotes)}
+  onLoopChange={(loop) => updateClip(clip.id, { loop })}
+  onLengthChange={(len) => updateClip(clip.id, { lengthBeats: len })}
+  onPositionChange={(pos) => updateClip(clip.id, { offsetBeats: pos })}
+/>;
 ```
 
 ---
 
-## 🎛️ Props
+## 🎛️ Props (Source: `types.ts`)
 
-### Obligatoires
+| Prop | Type | Rôle |
+|------|------|------|
+| `notes` | `ReadonlyArray<MidiNote>` | Source de vérité des notes (pitch/time/duration/velocity). |
+| `lengthBeats?` | `number` (def: 4) | Longueur du clip (ligne de fin + handle). |
+| `onChange?` | `(notes: MidiNote[]) => void` | Emission finale (commit) après `pointerUp` ou double‑click. |
+| `onDraftChange?` | `(notes: MidiNote[]) => void` | Emission throttlée (80 ms) pendant drag / resize pour preview temps réel. |
+| `loop?` | `<code>{ start: number; end: number } \| null</code>` | Définition de la boucle (barre supérieure tier 3). |
+| `onLoopChange?` | `(loop: { start: number; end: number } \| null) => void` | Callback (throttlé) lors du drag des handles/move. |
+| `position?` | `number` | Offset de lecture / début du clip (barre tier 2). |
+| `onPositionChange?` | `(beat: number) => void` | Déplacement du marqueur rouge (drag). |
+| `playheadBeat?` | `number` | Beat courant transport (ligne overlay). |
+| `onLengthChange?` | `(beats: number) => void` | Resize global du clip via handle vert (tier 1). |
+| `followPlayhead?` | `boolean` (def: true) | Auto-scroll pour garder le playhead visible. |
+| `active?` | `boolean` (def: false) | Transport en lecture (active overlay rAF). |
+| `grid?` | `GridValue` (def: 16) | Résolution (1/grid) pour création & durée min. |
+| `onGridChange?` | `(g: GridValue) => void` | Contrôle externe (non utilisé en interne sans passer prop). |
+| `snap?` | `boolean` (def: true) | Snap temps sur drag / resize / création. Shift = bypass. |
+| `onSnapChange?` | `(b: boolean) => void` | Contrôle externe éventuel. |
+| `pxPerBeat?` | `number` | Zoom horizontal contrôlé (16–192). |
+| `onPxPerBeatChange?` | `(n: number) => void` | Retour wheel-zoom parent. |
+| `onSeek?` | `(beat: number) => void` | Prévu (actuellement non utilisé). |
 
-- `notes: ReadonlyArray<MidiNote>` – Notes MIDI à afficher
+### Notes sur le Mode Contrôlé / Non Contrôlé
 
-### Optionnelles
+`pxPerBeat`, `grid`, `snap` utilisent un hook `useControllableState`. Si la prop n'est pas fournie → état interne. Si fournie → le setter émet uniquement via callback sans muter l'interne.
 
-- `onChange?: (notes: MidiNote[]) => void` – Callback lors de modifications
-- `lengthBeats?: number` – Longueur du clip (défaut: 4)
-- `loop?: { start: number; end: number } | null` – Zone de boucle
-- `onLoopChange?: (loop) => void` – Callback changement boucle
-- `playheadBeat?: number` – Position actuelle du transport
-- `followPlayhead?: boolean` – Auto-scroll sur le playhead (défaut: true)
-- `active?: boolean` – Le clip est en lecture (défaut: false)
+---
+
+## 🔁 Barre Supérieure (TopBar Tiers)
+
+Découpée en 3 tiers (hauteur standard `topBarHeight = 36` → chaque ~12px) :
+
+1. Tier 1 : Clip Length (ligne verte + handle de fin) → drag = resize clip.
+2. Tier 2 : Position Start (ligne rouge) → drag = modification offset `position`.
+3. Tier 3 : Loop (bande grisée + lignes jaunes + handles start/end + drag central pour déplacer l'ensemble).
+
+Le survol d'un handle force le curseur `ew-resize`. Drag central de loop → `loopMove`.
+
+---
+
+## 🖱️ Interactions Réelles (Corrigé)
+
+| Action | Geste | Mode interne | Snap |
+|--------|-------|--------------|------|
+| Sélection simple | Single click sur note | `dragMode = null` puis selection | N/A |
+| Sélection rectangle | Click vide (zone > clavier) + drag | `rectangleSelection` | N/A |
+| Déplacement note(s) | Drag sur note sélectionnée | `move` | Snap sauf Shift |
+| Redimensionnement | Drag sur bord droit (6px) | `resize` | Snap sauf Shift |
+| Création note | Double‑click zone vide | Commit immédiat | Snap grid |
+| Suppression note | Double‑click sur note | Commit (filtre) | N/A |
+| Loop start/end | Drag handle jaune | `loopStart` / `loopEnd` | Snap sauf Shift |
+| Loop move | Drag à l’intérieur de la zone loop (tier 3) | `loopMove` | Snap sauf Shift |
+| Offset clip | Drag sur marqueur rouge (tier 2) | `setPlayhead` | Snap sauf Shift |
+| Resize clip | Drag handle clip end (tier 1) | `resizeClip` | Snap sauf Shift |
+| Preview clavier | Click / drag vertical sur clavier | Glide pitches | N/A |
+| Ghost preview | Hover vide (zone notes) | `ghost` (dessin translucide) | Snap temps |
+
+`Shift` pendant un drag désactive uniquement le snap sur les deltas temps (time/duration), pas sur pitch.
 
 ---
 
 ## ⌨️ Raccourcis Clavier
 
-| Touche | Action |
-|--------|--------|
-| **Delete / Backspace** | Supprimer note(s) sélectionnée(s) |
-| **Molette** | Scroll vertical (pitch) |
-| **Shift + Molette** | Scroll horizontal (temps) |
-| **Ctrl/Cmd + Molette** | Zoom horizontal |
-| **Alt + Molette** | Zoom vertical |
-| **Shift (drag)** | Désactiver snap temporairement |
+| Touche | Effet |
+|--------|-------|
+| Delete / Backspace | Supprime notes sélectionnées (commit) |
+| Wheel | Scroll vertical |
+| Shift + Wheel | Scroll horizontal |
+| Ctrl/Cmd + Wheel | Zoom horizontal (16–192 px/beat) |
+| Alt + Wheel | Zoom vertical (6–24 px/semitone) |
+| Shift (pendant drag) | Désactive snap temps |
 
 ---
 
-## 🖱️ Interactions Souris
+## 🎨 Feedback Visuel
 
-### Création de Note
+| Élément | Couleur / Style |
+|---------|-----------------|
+| Note normale | `#FBBF24` (orange) |
+| Note sélectionnée | `#FFD02F` (jaune clair + bordure) |
+| Note hover | `#FACC15` |
+| Ghost note | Bleu translucide `#7aa2ff` alpha 0.35 |
+| Loop zone | Bande `rgba(255,255,255,0.04)` + lignes jaunes |
+| Clip end | Ligne verticale verte |
+| Position start | Ligne verticale rouge |
+| Playhead overlay | Ligne 1px rouge (overlay canvas) |
+| Drag guides | Pointillés jaunes + labels time/pitch monospace |
 
-1. Cliquer dans la zone vide (à droite du clavier)
-2. La note est créée avec durée par défaut (1/grid)
-3. Drag immédiat pour ajuster la durée
-
-### Déplacement de Note
-
-1. Cliquer sur une note
-2. Drag pour déplacer (temps + pitch)
-3. Snap automatique à la grille
-
-### Redimensionnement de Note
-
-1. Cliquer sur le bord droit d'une note
-2. Drag horizontal pour ajuster la durée
-3. Durée minimale = 1/grid
-
-### Sélection Multiple (Marquee)
-
-1. Cliquer dans la zone vide
-2. Drag pour créer un rectangle
-3. Toutes les notes touchées sont sélectionnées
-
-### Preview Audio
-
-- Cliquer sur le clavier piano (gauche)
-- La note est jouée instantanément
-- Relâcher pour arrêter
-
-### Loop Handles
-
-- Handles jaunes en haut de la grille
-- Drag pour ajuster start/end
+Curseurs : `crosshair` (vide), `pointer` (note ou zone loop), `ew-resize` (bord note / handles), `default` (clavier).
 
 ---
 
-## 🎨 Visual Feedback
+## 🧠 Draft vs Commit (onDraftChange / onChange)
 
-### Couleurs des Notes
+Pendant `move` / `resize` / loop drags :
 
-- **Orange** `#FBBF24` : Note normale
-- **Jaune clair** `#FFD02F` : Note sélectionnée
-- **Jaune moyen** `#FACC15` : Note survolée
-- **Bleu translucide** : Ghost note (preview)
+- Émission brouillon (`onDraftChange`) throttlée à 80 ms (`useThrottle`).
+- Au `pointerUp` → commit final via `onChange`.
 
-### Curseurs
-
-- **Crosshair** : Zone vide (création)
-- **Pointer** : Sur une note (déplacement)
-- **EW-resize** : Bord droit d'une note (redimensionnement)
-- **Default** : Clavier piano
-
-### Guides de Drag
-
-- Lignes pointillées jaunes : temps (vertical) + pitch (horizontal)
-- Labels : position beat + pitch number
+Avantage : pré-écoute fluide sans spammer le store global.
 
 ---
 
-## 🔧 Configuration Interne
+## ⚙️ Performance & Architecture
 
-Ces paramètres sont gérés automatiquement mais peuvent être exposés :
+Optimisations en place :
+
+- Viewport culling (buffer `culledBufferRef`) → dessine seulement notes visibles.
+- Double canvas : base (statique) + overlay (playhead & guides, cadencé). Overlay limité à ~30 Hz lors de drags haute fréquence.
+- rAF batching (`useDrawScheduler`) pour coalescer invalidations multiples.
+- Throttle user emission & loop drag (80 ms) pour limiter pression sur React/Zustand.
+- Aucune allocation dans boucle de dessin sauf recomposition du buffer cull (réutilisation tableau mutation contrôlée). Notes copiées seulement sur pointerStart.
+- `devicePixelRatio` suivi via hook léger, redimensionne canvas via `ResizeObserver`.
+- Curseur mis à jour via accès direct DOM + throttle 16 ms (pas de re-render React pour un simple style).
+
+Bonnes pratiques additionnelles :
+
+1. Fournir `memo` au wrapper parent si notes ne changent pas souvent.
+2. Éviter de recréer les arrays `notes` inutiles (utiliser références stables du store).
+3. Limiter la taille du clip (très grand nombre de notes) ou segmenter par viewport si > 5000 notes.
+4. Désactiver `followPlayhead` si l'utilisateur manipule le zoom (améliore orientation UX).
+
+---
+
+## 🔍 Différences vs Ancienne Version du Guide
+
+| Ancien Guide | État Réel |
+|--------------|-----------|
+| Création note = simple click | Création = double‑click vide |
+| Suppression = Delete | Suppression rapide = double‑click sur la note ou Delete sélection |
+| Loop = handles simples | Loop + move complet + throttle |
+| Pas de notion `position` | Position offset (ligne rouge) prise en charge |
+| Pas de resize clip | Handle fin clip (ligne verte) |
+| Pas de draft callback | `onDraftChange` disponible (throttlé) |
+| Pas de ghost / drag guide détaillé | Ghost + guides temps/pitch monospace |
+
+---
+
+## 🔧 Contrôles Avancés / Toolbar Exemple
 
 ```tsx
-// État UI interne (non exposé dans props)
-const [pxPerBeat, setPxPerBeat] = useState(64);
-const [pxPerSemitone, setPxPerSemitone] = useState(14);
-const [grid, setGrid] = useState<4 | 8 | 16 | 32>(16);
-const [snap, setSnap] = useState(true);
-const [snapEdges, setSnapEdges] = useState(true);
-```
-
-Pour exposer ces contrôles, créer un `<PianoRollToolbar>` séparé.
-
----
-
-## 📊 Performance
-
-### Optimisations Actives
-
-- ✅ Viewport culling (seules notes visibles dessinées)
-- ✅ Buffer réutilisé (pas d'allocation par frame)
-- ✅ Double canvas (base + overlay)
-- ✅ devicePixelRatio géré
-
-### Monitoring
-
-```tsx
-// Accès aux métriques (dans le composant)
-perfRef.current.lastDrawMs  // Dernier temps de rendu (ms)
-perfRef.current.visible      // Notes dessinées
-perfRef.current.total        // Notes totales
-perfRef.current.avgMs        // Moyenne lissée (EMA)
-```
-
----
-
-## 🧩 Extensions Possibles
-
-### Ajouter un Toolbar
-
-```tsx
-import { PianoRoll } from "@/components/daw/controls/clip-editor/pianoroll/PianoRoll";
-import { PianoRollToolbar } from "@/components/daw/controls/clip-editor/pianoroll/PianoRollToolbar";
-
-export function ClipEditorWithToolbar(props: {
-  notes: ReadonlyArray<MidiNote>;
-  lengthBeats?: number;
-  // ...autres props PianoRoll
-}) {
+function PianoRollWithToolbar({ clip }) {
   const [grid, setGrid] = useState<GridValue>(16);
   const [snap, setSnap] = useState(true);
   const [pxPerBeat, setPxPerBeat] = useState(64);
 
   return (
     <div className="flex flex-col h-full">
-      <PianoRollToolbar
+      <Toolbar
         grid={grid}
-        setGrid={setGrid}
+        onGridChange={setGrid}
         snap={snap}
-        setSnap={setSnap}
+        onSnapChange={setSnap}
         pxPerBeat={pxPerBeat}
-        setPxPerBeat={setPxPerBeat}
+        onPxPerBeatChange={setPxPerBeat}
       />
       <PianoRoll
-        {...props}
-        // lie les contrôles au PianoRoll (controlled)
+        notes={clip.notes}
+        lengthBeats={clip.lengthBeats}
+        loop={clip.loop}
+        position={clip.offsetBeats}
+        playheadBeat={transport.positionBeats - clip.offsetBeats}
+        active={transport.isPlaying}
         grid={grid}
         snap={snap}
         pxPerBeat={pxPerBeat}
-        // facultatif : permet au wheel-zoom du PianoRoll d'actualiser l'état parent
         onPxPerBeatChange={setPxPerBeat}
+        onChange={(n) => updateClip(clip.id, { notes: n })}
+        onDraftChange={(n) => setLivePreview(n)}
+        onLoopChange={(l) => updateClip(clip.id, { loop: l })}
+        onLengthChange={(len) => updateClip(clip.id, { lengthBeats: len })}
+        onPositionChange={(pos) => updateClip(clip.id, { offsetBeats: pos })}
       />
     </div>
   );
 }
 ```
 
-### Ajouter Velocity Lane
+---
 
-```tsx
-<div className="flex flex-col h-full">
-  <PianoRoll {...props} />
-  <VelocityLane
-    notes={notes}
-    selected={selectedIndices}
-    onChange={(idx, vel) => updateVelocity(idx, vel)}
-  />
-</div>
-```
+## 🐛 Debug / Checklist Rapide
+
+| Problème | Vérifications |
+|----------|---------------|
+| Canvas vide | Conteneur a une hauteur; `notes.length` >= 0; pas d'erreur console. |
+| Lag drag notes | Parent ne recrée pas `notes` à chaque frame; pas de heavy selector Zustand. |
+| Playhead ne suit pas | `followPlayhead` vrai & `active`; transport fournit `playheadBeat`. |
+| Loop ne met pas à jour store | `onLoopChange` fourni; attendre ≤80ms (throttle). |
+| Resize clip ignore snap | Vérifier touche Shift (désactive). |
 
 ---
 
-## 🐛 Debugging
+## 📚 Références Code
 
-### Canvas ne s'affiche pas
-
-- Vérifier que le conteneur parent a une hauteur définie
-- Vérifier `notes` non vide
-- Ouvrir DevTools > Canvas debugging
-
-### Performance faible
-
-- Réduire `pxPerBeat` (moins de détails)
-- Vérifier `culledBufferRef` utilisé
-- Monitorer `perfRef.current.avgMs`
-
-### Notes ne se créent pas
-
-- Vérifier `onChange` défini
-- Vérifier que le clic est dans la zone valide (xCss >= keyWidth)
+| Fichier | Rôle |
+|---------|------|
+| `PianoRoll.tsx` | Composition générale + wiring hooks. |
+| `types.ts` | Définition API publique. |
+| `hooks/*` | Zoom, scroll, auto-follow, draw, throttle, loop state, preview. |
+| `core/utils.ts` | Clamp overlap & resize safe. |
+| `interactions/*` | Hit‑testing & gestuelle (pointer / double‑click). |
+| `rendering/*` | Dessin base & overlay (culling, guides). |
 
 ---
 
-## 📚 Références
+## ✨ Bonnes Pratiques Synthèse
 
-### Fichiers Liés
-
-- `constants.ts` : Constantes globales
-- `coords.ts` : Conversion coordonnées
-- `hit.ts` : Détection de hit
-- `utils.ts` : Helpers snap/clamp
-- `draw/` : Fonctions de rendu modulaires
-
-### Types Principaux
-
-```tsx
-type MidiNote = {
-  id: string;
-  pitch: number;     // 0-127
-  time: number;      // en beats
-  duration: number;  // en beats
-  velocity: number;  // 0-1
-};
-
-type DraftNote = MidiNote & { __id: number };
-```
+1. Fournir `onDraftChange` si besoin de pré‑écoute (synth live, quantization visuelle).
+2. Regrouper mises à jour clip dans un seul store action (éviter cascades).
+3. Ne jamais muter `notes` in-place → fournir nouveau tableau pour diff fiable.
+4. Utiliser `crypto.randomUUID()` pour id stable si disponible.
+5. Débrancher `followPlayhead` pendant édition prolongée pour éviter jumps.
 
 ---
 
-## ✨ Bonnes Pratiques
-
-1. **Toujours fournir `lengthBeats`** : évite les calculs incorrects
-2. **Mémoriser `notes`** : éviter re-render inutiles
-3. **Throttle `onChange`** : éviter trop d'updates
-4. **Désactiver followPlayhead** : si l'utilisateur scroll manuellement
-5. **Utiliser `memo`** : si le PianoRoll est dans un contexte complexe
-
----
-
-## 🎯 Exemples d'Intégration
-
-### Intégration dans ClipEditor
-
-```tsx
-const ClipEditor = ({ clipId }) => {
-  const clip = useProjectStore((s) => s.clips[clipId]);
-  const updateClip = useProjectStore((s) => s.updateClip);
-  
-  return (
-    <div className="h-full">
-      <PianoRoll
-        notes={clip.notes}
-        onChange={(notes) => updateClip(clipId, { notes })}
-        lengthBeats={clip.lengthBeats}
-        loop={clip.loop}
-        playheadBeat={transport.currentBeat - clip.startBeat}
-        active={clip.isPlaying}
-      />
-    </div>
-  );
-};
-```
-
-### Intégration avec Transport
-
-```tsx
-const transport = useTransportStore();
-
-<PianoRoll
-  playheadBeat={transport.positionBeats}
-  active={transport.isPlaying}
-  followPlayhead={transport.isPlaying}
-/>
-```
-
----
-
-Bonne utilisation ! 🎹🎶
+Bonne utilisation ! 🎹🔥

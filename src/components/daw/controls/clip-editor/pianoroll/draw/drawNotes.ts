@@ -1,6 +1,6 @@
 // src/components/daw/controls/clip-editor/draw/drawNotes.ts
 
-import type { DraftNote } from "../hit";
+import type { DraftNote } from "../types";
 
 export type NotesDrawOptions = {
   notes: ReadonlyArray<DraftNote>;
