@@ -12,6 +12,7 @@ import {
   initPeakHold,
   updatePeakHold,
 } from "@/lib/audio/core/meter-utils";
+import { PerfMonitor } from "@/lib/perf/perf-monitor";
 
 type Props = {
   width?: number;
@@ -33,13 +34,20 @@ const MasterVuComponent = ({ width = 160, height = 24, compact = false }: Props)
     if (!ctx) return;
 
     // No gradient; color derived from RMS using rmsColor
-
-    const unsub = getGlobalRaf().subscribe(() => {
+    // Throttle draw to ~30Hz (avoid full 60Hz render load)
+    const interval = 1000 / 30;
+    let last = 0;
+    const pm = PerfMonitor();
+    const unsub = getGlobalRaf().subscribe((t) => {
+      if (t - last < interval) return;
+      last = t;
       // Lazy init analyser as soon as engine is ready
       const engine = AudioEngine.ensure();
       if (engine.initialized) monitor.init();
       // Read master levels if analyser exists
+      const t0 = pm.isEnabled() ? performance.now() : 0;
       const level = monitor.read();
+      if (pm.isEnabled()) pm.recordDuration("master.read", performance.now() - t0);
       const linRms = Math.min(1, level.rms);
       const linPeak = Math.min(1, level.peak);
       const now = performance.now();
@@ -56,6 +64,7 @@ const MasterVuComponent = ({ width = 160, height = 24, compact = false }: Props)
       }
 
       // Draw bar
+      const d0 = pm.isEnabled() ? performance.now() : 0;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const barColor = rmsColor(linRms);
       ctx.fillStyle = barColor;
@@ -102,6 +111,7 @@ const MasterVuComponent = ({ width = 160, height = 24, compact = false }: Props)
       // Border
       ctx.strokeStyle = "rgba(255,255,255,0.12)";
       ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+      if (pm.isEnabled()) pm.recordDuration("master.draw", performance.now() - d0);
     });
 
     return () => {

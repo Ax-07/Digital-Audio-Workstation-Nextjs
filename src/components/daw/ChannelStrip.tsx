@@ -8,14 +8,15 @@ import { DBFS_TRACK_TICKS, dbToLin, rmsColor, initPeakHold, updatePeakHold } fro
 import { Slider } from "@/components/ui/slider";
 import { useProjectStore } from "@/lib/stores/project.store";
 import { useUiStore } from "@/lib/stores/ui.store";
+import { PerfMonitor } from "@/lib/perf/perf-monitor";
 
 type Props = {
   id: string;
 };
 
 const ChannelStripComponent = ({ id }: Props) => {
-  const tracks = useMixerStore((s) => s.tracks);
-  const track = tracks.find((t) => t.id === id);
+  // Subscribe only to the specific track to avoid re-render on unrelated track updates
+  const track = useMixerStore((s) => s.tracks.find((t) => t.id === id));
   const setGain = useMixerStore((s) => s.setTrackGainDb);
   const setPan = useMixerStore((s) => s.setTrackPan);
   const toggleMute = useMixerStore((s) => s.toggleTrackMute);
@@ -44,14 +45,18 @@ const ChannelStripComponent = ({ id }: Props) => {
     const ticks = DBFS_TRACK_TICKS;
     let last = 0;
     const interval = 1000 / 30; // 30 Hz
+    const pm = PerfMonitor();
     const unsub = raf.subscribe((t) => {
       if (t - last < interval) return;
       last = t;
+      const t0 = pm.isEnabled() ? performance.now() : 0;
       const { peak, rms } = MixerCore.ensure().readTrackMeter(id);
+      if (pm.isEnabled()) pm.recordDuration("track.read", performance.now() - t0);
       const peakHoldLin = updatePeakHold(peakHold.current, Math.min(1, Math.max(0, peak)), t);
       const h = canvas.height;
       const w = canvas.width;
       // Clear
+      const d0 = pm.isEnabled() ? performance.now() : 0;
       ctx.clearRect(0, 0, w, h);
       const rmsLin = Math.min(1, Math.max(0, rms));
       const rmsPx = Math.floor(rmsLin * h);
@@ -77,6 +82,7 @@ const ChannelStripComponent = ({ id }: Props) => {
       // Border
       ctx.strokeStyle = "#444";
       ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+      if (pm.isEnabled()) pm.recordDuration("track.draw", performance.now() - d0);
     });
     return () => unsub();
   }, [id, raf]);
