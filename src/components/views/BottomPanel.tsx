@@ -11,8 +11,8 @@ import { useEffect, useState } from "react";
 import { DualSynthPanel } from "@/components/instruments/DualSynthPanel";
 import { useInstrumentStore } from "@/lib/stores/instrument.store";
 // import { ClipEditor } from "../daw/controls/clip-editor/ClipEditor";
-import { MidiClipEditor } from "../daw/controls/clip-editor/MidiClipEditor";
 import { InstrumentKind } from "@/lib/audio/types";
+import { MidiClipEditor } from "../daw/controls/midi-clip-editor-v2/midi-clip-editor";
 
 const BottomPanelComponent = () => {
   const selectedId = useUiStore((s) => s.selectedTrackId);

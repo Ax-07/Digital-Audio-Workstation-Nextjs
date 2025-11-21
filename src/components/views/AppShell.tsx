@@ -12,6 +12,7 @@ import { ArrangementView } from "../daw/arrangement/ArrangementView";
 import { getSessionPlayer } from "@/lib/audio/core/session-player";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { HeaderTransport } from "./HeaderTransport";
+import { DevPerfPanel } from "../dev/DevPerfPanel";
 
 const AppShellComponent = () => {
   const viewMode = useUiStore((s) => s.viewMode);
@@ -28,6 +29,7 @@ const AppShellComponent = () => {
   return (
     <div className="flex h-screen flex-col bg-neutral-900 text-neutral-200">
       {/* Header */}
+        <DevPerfPanel />
       <header className="border-b border-neutral-700 bg-neutral-800 px-3">
         <HeaderTransport />
       </header>
