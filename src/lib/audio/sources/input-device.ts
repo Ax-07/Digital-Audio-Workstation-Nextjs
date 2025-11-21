@@ -23,11 +23,11 @@ export type MidiLiveConfig = {
 };
 
 export class InputDevice {
-  /** Accès Web MIDI (s’il est disponible dans le navigateur) */
-  private access: any | null = null;
+  /** Accès Web MIDI (s'il est disponible dans le navigateur) */
+  private access: MIDIAccess | null = null;
 
   /** Liste des entrées MIDI actuellement visibles */
-  private inputs: any[] = [];
+  private inputs: MIDIInput[] = [];
 
   /** Flag : est-ce qu’on écoute les messages MIDI en ce moment ? */
   private listening = false;
@@ -50,8 +50,7 @@ export class InputDevice {
     if (typeof navigator === "undefined" || !("requestMIDIAccess" in navigator)) return;
     if (this.access) return;
     try {
-      // @ts-ignore - Web MIDI peut ne pas être typé dans lib.dom.d.ts selon l’environnement
-      this.access = await (navigator as any).requestMIDIAccess({ sysex: false });
+      this.access = await (navigator as Navigator & { requestMIDIAccess: (options?: MIDIOptions) => Promise<MIDIAccess> }).requestMIDIAccess({ sysex: false });
       this.refreshInputs();
     } catch {
       // En cas d’erreur (permissions, navigateur), on reste silencieux.
@@ -89,7 +88,7 @@ export class InputDevice {
     if (this.listening) return;
     this.listening = true;
     for (const input of this.inputs) {
-      input.onmidimessage = (e: any) => this.handleMessage(e);
+      input.onmidimessage = (e: MIDIMessageEvent) => this.handleMessage(e);
     }
   }
 
@@ -123,7 +122,7 @@ export class InputDevice {
    *
    * Filtrage de canal si config.channel est défini.
    */
-  private handleMessage(ev: any): void {
+  private handleMessage(ev: MIDIMessageEvent): void {
     const data = ev.data;
     if (!data || data.length < 3) return;
 
@@ -178,7 +177,7 @@ export class InputDevice {
     if (!trackId) return;
 
     const mt = ensureMidiTrack(trackId);
-    mt.noteOn(pitch, velocity);
+    mt.noteOn(pitch, velocity); // Pas de preview ici, c'est du jeu MIDI réel
   }
 
   /**

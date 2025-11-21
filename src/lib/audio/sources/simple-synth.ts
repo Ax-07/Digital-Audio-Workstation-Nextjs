@@ -67,11 +67,12 @@ export type SimpleSynthParams = {
  * -----
  * Représente une voix polyphonique active ou réutilisable.
  *
- * - active    : la voix est en cours d’utilisation
+ * - active    : la voix est en cours d'utilisation
  * - pitch     : note MIDI associée à la voix
  * - osc       : OscillatorNode pour cette voix (WebAudio = one-shot)
- * - gain      : GainNode global pour l’enveloppe
+ * - gain      : GainNode global pour l'enveloppe
  * - startedAt : timestamp (ctx.currentTime) pour le voice stealing
+ * - isPreview : true si c'est une note de preview (non affectée par stopAllVoices)
  */
 type Voice = {
   active: boolean;
@@ -79,6 +80,7 @@ type Voice = {
   osc: OscillatorNode | null;
   gain: GainNode;
   startedAt: number;
+  isPreview?: boolean;
 };
 
 export class SimpleSynth {
@@ -287,25 +289,27 @@ export class SimpleSynth {
   }
 
   /**
-   * noteOn(pitch, velocity, destination)
-   * ------------------------------------
+   * noteOn(pitch, velocity, destination, isPreview)
+   * -----------------------------------------------
    * Ouvre une nouvelle note :
    *  - alloue une voix
    *  - crée un OscillatorNode
    *  - applique les enveloppes de gain / detune (GenericEnvelope)
-   *  - démarre l’oscillateur
+   *  - démarre l'oscillateur
    *
    * velocity : facteur 0..1 sur le niveau de base (baseGain).
+   * isPreview : si true, la note ne sera pas stoppée par stopAllVoices() (pour preview keyboard).
    */
-  noteOn(pitch: number, velocity: number, destination: AudioNode): void {
+  noteOn(pitch: number, velocity: number, destination: AudioNode, isPreview = false): void {
     const ctx = this.ensureContext();
     if (!ctx) return;
     const v = this.allocateVoice(destination);
     if (!v) return;
 
     v.pitch = pitch;
+    v.isPreview = isPreview;
 
-    // Reset / déconnexion éventuelle de l’ancien osc
+    // Reset / déconnexion éventuelle de l'ancien osc
     if (v.osc) {
       try {
         v.osc.disconnect();
@@ -421,7 +425,7 @@ export class SimpleSynth {
       }
     }
 
-    // Démarrage de l’osc pour cette voix
+    // Démarrage de l'osc pour cette voix
     v.osc.start(now);
     v.startedAt = now;
   }
@@ -471,24 +475,35 @@ export class SimpleSynth {
   /**
    * stopAllVoices()
    * ----------------
-   * Coupe immédiatement toutes les voix actives (utilisé quand on stoppe une scène/clip/transport).
+   * Coupe immédiatement toutes les voix actives de CLIP (utilisé quand on stoppe une scène/clip/transport).
+   * Les voix marquées comme preview sont IGNORÉES pour permettre la preview du keyboard.
    * Applique un court release sur le gain puis stoppe l'oscillateur.
    */
   stopAllVoices(): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const rel = 0.05;
+    const now = ctx.currentTime;
+    
     for (let i = 0; i < this.voices.length; i++) {
       const v = this.voices[i];
-      if (!v.active || !v.osc) continue;
+      // SKIP les voix preview pour permettre le keyboard après un stop
+      if (!v.active || !v.osc || v.isPreview) continue;
+      
       try {
-        const now = ctx.currentTime;
         v.gain.gain.cancelScheduledValues(now);
         v.gain.gain.setTargetAtTime(0, now, rel * 0.5);
         v.osc.stop(now + rel + 0.01);
       } catch {}
+      
+      // Réinitialise le gain pour permettre la réutilisation
+      try {
+        v.gain.gain.setValueAtTime(0, now + rel + 0.02);
+      } catch {}
+      
       v.active = false;
       v.osc = null;
+      v.isPreview = false;
     }
   }
 }

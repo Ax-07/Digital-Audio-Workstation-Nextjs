@@ -110,10 +110,19 @@ export class MidiTrack {
   /**
    * ensureRouting()
    * ---------------
-   * S’assure que la piste possède bien un input audio dans le Mixer.
+   * S'assure que la piste possède bien un input audio dans le Mixer.
    * Appelé dans le constructeur et dans noteOn().
    */
   private ensureRouting(): void {
+    // IMPORTANT: Initialiser l'AudioEngine avant de créer les pistes dans le mixer
+    const engine = AudioEngine.ensure();
+    if (!engine.initialized) {
+      engine.init().then(() => {
+        this.ensureRouting();
+      }).catch(() => {});
+      return;
+    }
+    
     const mix = MixerCore.ensure();
     mix.ensureTrack(this.id);
     this.destination = mix.getTrackInput(this.id);
@@ -174,20 +183,23 @@ export class MidiTrack {
   /**
    * noteOn()
    * --------
-   * Appelé par l’éditeur piano-roll, les pads MIDI, etc.
-   * La piste appelle simplement l’instrument actif.
+   * Appelé par l'éditeur piano-roll, les pads MIDI, etc.
+   * La piste appelle simplement l'instrument actif.
+   * @param pitch - Note MIDI (0-127)
+   * @param velocity - Vélocité (0.0-1.0)
+   * @param isPreview - Si true, la note est jouée en prévisualisation (pas enregistrée)
    */
-  noteOn(pitch: number, velocity = 0.8): void {
+  noteOn(pitch: number, velocity = 0.8, isPreview = false): void {
     this.ensureRouting();
     const dest = this.destination;
     if (!dest) return;
 
     if (this.kind === "simple-synth") {
       if (!this.synth) this.synth = new SimpleSynth();
-      this.synth.noteOn(pitch, velocity, dest);
+      this.synth.noteOn(pitch, velocity, dest, isPreview);
     } else if (this.kind === "dual-synth") {
       if (!this.dual) this.dual = new DualOscSynth();
-      this.dual.noteOn(pitch, velocity, dest);
+      this.dual.noteOn(pitch, velocity, dest, isPreview);
     } else if (this.kind === "sampler") {
       this.sampler?.trigger(pitch, velocity, dest);
     }

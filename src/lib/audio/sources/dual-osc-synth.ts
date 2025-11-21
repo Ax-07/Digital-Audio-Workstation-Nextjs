@@ -88,6 +88,7 @@ type Voice = {
   mixGainB: GainNode;
   gain: GainNode;
   startedAt: number;
+  isPreview?: boolean;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -368,8 +369,8 @@ export class DualOscSynth {
   /* -------------------------------------------------------------------------- */
 
   /**
-   * noteOn(pitch, velocity, destination)
-   * ------------------------------------
+   * noteOn(pitch, velocity, destination, isPreview)
+   * -----------------------------------------------
    * Joue une nouvelle note :
    *  - alloue une voix
    *  - crée OscA / OscB avec waveforms configurées
@@ -377,9 +378,10 @@ export class DualOscSynth {
    *  - configure le mix A/B (crossfade trig)
    *  - applique les enveloppes (amp, detuneA, detuneB, mix)
    *
-   * velocity : facteur 0..1 pour l’amplitude de base.
+   * velocity : facteur 0..1 pour l'amplitude de base.
+   * isPreview : si true, la note ne sera pas stoppée par stopAllVoices() (pour preview keyboard).
    */
-  noteOn(pitch: number, velocity: number, destination: AudioNode): void {
+  noteOn(pitch: number, velocity: number, destination: AudioNode, isPreview = false): void {
     const ctx = this.ensureContext();
     if (!ctx) return;
 
@@ -387,6 +389,7 @@ export class DualOscSynth {
     if (!v) return;
 
     v.pitch = pitch;
+    v.isPreview = isPreview;
 
     // On recrée systématiquement les oscillateurs pour un départ propre
     try {
@@ -663,25 +666,36 @@ export class DualOscSynth {
   /**
    * stopAllVoices()
    * ----------------
-   * Couper immédiatement toutes les voix actives avec un court release.
+   * Couper immédiatement toutes les voix actives de CLIP avec un court release.
+   * Les voix marquées comme preview sont IGNORÉES pour permettre la preview du keyboard.
    */
   stopAllVoices(): void {
     const ctx = this.ctx;
     if (!ctx) return;
     const tau = 0.03; // release court
+    const now = ctx.currentTime;
+    
     for (let i = 0; i < this.voices.length; i++) {
       const v = this.voices[i];
-      if (!v.active) continue;
+      // SKIP les voix preview pour permettre le keyboard après un stop
+      if (!v.active || v.isPreview) continue;
+      
       try {
-        const now = ctx.currentTime;
         v.gain.gain.cancelScheduledValues(now);
         v.gain.gain.setTargetAtTime(0, now, tau);
         v.oscA?.stop(now + tau + 0.01);
         v.oscB?.stop(now + tau + 0.01);
       } catch {}
+      
+      // Réinitialise le gain pour permettre la réutilisation
+      try {
+        v.gain.gain.setValueAtTime(0, now + tau + 0.02);
+      } catch {}
+      
       v.active = false;
       v.oscA = null;
       v.oscB = null;
+      v.isPreview = false;
     }
   }
 
