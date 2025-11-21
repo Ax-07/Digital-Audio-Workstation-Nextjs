@@ -16,7 +16,7 @@ export function useCanvasSetup(
     const parent = wrapRef.current;
     if (!cvs || !parent) return;
 
-    const ctx = cvs.getContext("2d");
+    const ctx = cvs.getContext("2d", { willReadFrequently: true } as CanvasRenderingContext2DSettings) as CanvasRenderingContext2D | null;
     if (!ctx) return;
     ctxRef.current = ctx;
 

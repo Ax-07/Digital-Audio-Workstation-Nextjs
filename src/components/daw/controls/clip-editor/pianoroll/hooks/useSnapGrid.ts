@@ -8,7 +8,7 @@ export function useSnapGrid(snap: boolean, grid: GridValue) {
     (beat: number) => {
       if (!snap) return beat;
       const step = 1 / grid;
-      return Math.round(beat / step) * step;
+      return Math.floor(beat / step) * step;
     },
     [snap, grid]
   );

@@ -1,7 +1,7 @@
 // src/components/daw/controls/clip-editor/pianoroll/hooks/useCoordinates.ts
 
 import { useCallback } from "react";
-import * as coords from "../coords";
+import * as coords from "../core/coords";
 
 export function useCoordinates(
   keyWidth: number,
