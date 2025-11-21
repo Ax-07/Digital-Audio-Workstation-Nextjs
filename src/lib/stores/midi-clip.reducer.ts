@@ -1,6 +1,6 @@
 // src/lib/stores/midi-clip.reducer.ts
 
-import type { ProjectDecl, ClipDecl } from "@/lib/audio/types";
+import type { ProjectDecl, ClipDecl, MidiNote } from "@/lib/audio/types";
 
 /* -------------------------------------------------------
  * 1. CRÉATION D’UN CLIP MIDI
@@ -9,12 +9,7 @@ export function createMidiClipReducer(
   project: ProjectDecl,
   trackId: string,
   sceneIndex: number,
-  notes: ReadonlyArray<{
-    pitch: number;
-    time: number;
-    duration: number;
-    velocity?: number;
-  }>,
+  notes: ReadonlyArray<MidiNote>,
   name?: string
 ): ProjectDecl {
   const id = `clip_${trackId}_${sceneIndex}_${Math.random()
@@ -45,12 +40,7 @@ export function updateMidiClipNotesReducer(
   project: ProjectDecl,
   trackId: string,
   sceneIndex: number,
-  notes: ReadonlyArray<{
-    pitch: number;
-    time: number;
-    duration: number;
-    velocity?: number;
-  }>
+  notes: ReadonlyArray<MidiNote>
 ): ProjectDecl {
   const scenes = (project.session?.scenes ?? []).map((s) => {
     if (s.index !== sceneIndex) return s;
@@ -112,6 +102,7 @@ export function updateClipLoopReducer(
         loopEnd: loop.end,
       };
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { loopStart, loopEnd, loop: _loopFlag, ...rest } = clip;
       updated = { ...rest, loop: false };
     }
