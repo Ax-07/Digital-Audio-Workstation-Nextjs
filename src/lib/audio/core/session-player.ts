@@ -17,6 +17,8 @@ import { MidiClipManager } from "./session-player/midi-clip-manager";
 import { UISyncManager } from "./session-player/ui-sync-manager";
 import { makeMidiNoteId, shouldDebounce, calculateDelayMs } from "./session-player/helpers";
 import type { InstrumentConfig } from "./session-player/types";
+import { MidiTrack } from "@/lib/audio/sources/midi-track";
+import { PerfMonitor } from "@/lib/perf/perf-monitor";
 
 /**
  * SessionPlayer
@@ -61,9 +63,11 @@ class SessionPlayer {
     if (this._started) return;
     
     const sch = TransportScheduler.ensure();
-    this._unsub = sch.onLaunch((e) =>
-      this.handleLaunch(e.when, e.trackId, e.clipId, e.clipType)
-    );
+    this._unsub = sch.onLaunch((e) => {
+      const pm = PerfMonitor();
+      if (pm.isEnabled()) pm.recordEvent("session.launch.recv");
+      this.handleLaunch(e.when, e.trackId, e.clipId, e.clipType);
+    });
     
     this._started = true;
     this.attachInstrumentSubscriptions().catch(() => {});
@@ -98,6 +102,8 @@ class SessionPlayer {
     clipId: string,
     clipType: "audio" | "midi"
   ): Promise<void> {
+    const pm = PerfMonitor();
+    const t0 = pm.isEnabled() ? performance.now() : 0;
     const ctx = AudioEngine.ensure().context;
     if (!ctx) return;
 
@@ -109,7 +115,9 @@ class SessionPlayer {
 
     // S'assurer que la piste existe dans le mixer
     try {
+      const tEns = pm.isEnabled() ? performance.now() : 0;
       (await import("@/lib/audio/core/mixer")).MixerCore.ensure().ensureTrack(trackId);
+      if (pm.isEnabled()) pm.recordDuration("session.ensureTrack", performance.now() - tEns);
     } catch (err) {
       this.devWarn("handleLaunch.ensureTrack", err);
     }
@@ -131,10 +139,18 @@ class SessionPlayer {
 
     // Lancer le clip selon son type
     if (clipType === "audio" && clip.type === "audio") {
+      if (pm.isEnabled()) pm.recordEvent("session.audio.start");
+      const ta = pm.isEnabled() ? performance.now() : 0;
       await this.launchAudioClip(trackId, clip, when, sceneIndex);
+      if (pm.isEnabled()) pm.recordDuration("session.audio.launch", performance.now() - ta);
     } else if (clipType === "midi" && clip.type === "midi") {
+      if (pm.isEnabled()) pm.recordEvent("session.midi.start");
+      const tm = pm.isEnabled() ? performance.now() : 0;
       await this.launchMidiClip(trackId, clip, when, sceneIndex);
+      if (pm.isEnabled()) pm.recordDuration("session.midi.launch", performance.now() - tm);
     }
+
+    if (pm.isEnabled()) pm.recordDuration("session.handleLaunch", performance.now() - t0);
   }
 
   /**
@@ -584,6 +600,15 @@ class SessionPlayer {
     } catch (err) {
       this.devWarn("attachLoopWatcher", err);
     }
+  }
+
+  /**
+   * Obtient une MidiTrack pour la preview (piano roll, pads).
+   * Configure automatiquement l'instrument si nécessaire.
+   */
+  async getMidiTrackForPreview(trackId: string): Promise<MidiTrack> {
+    const config = await this.getInstrumentConfig(trackId);
+    return this._midiManager.getMidiTrack(trackId, config ?? undefined);
   }
 }
 

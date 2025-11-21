@@ -26,6 +26,8 @@ class GlobalRaf {
 
   /** Dernière timestamp rAF reçue (pour debug ou interpolation éventuelle) */
   private lastTime = 0;
+  /** Dernier timestamp pour calculer l'intervalle frame et détecter long frames */
+  private lastFrameTs = 0;
 
   /**
    * Abonne une callback.
@@ -40,11 +42,14 @@ class GlobalRaf {
    */
   subscribe(cb: RafCallback): () => void {
     this.subscribers.add(cb);
+    // Perf: enregistrer le nombre d'abonnés (stocké dans lastMs)
+    try { const pm = require("@/lib/perf/perf-monitor").PerfMonitor(); if (pm.isEnabled()) pm.recordDuration("raf.subscribers", this.subscribers.size); } catch {}
 
     if (!this.running) this.start();
 
     return () => {
       this.subscribers.delete(cb);
+      try { const pm = require("@/lib/perf/perf-monitor").PerfMonitor(); if (pm.isEnabled()) pm.recordDuration("raf.subscribers", this.subscribers.size); } catch {}
       if (this.subscribers.size === 0) this.stop();
     };
   }
@@ -65,6 +70,20 @@ class GlobalRaf {
     const loop = (t: number) => {
       if (!this.running) return;
       this.lastTime = t;
+
+      // Perf: frame interval & long frames detection
+      try {
+        const { PerfMonitor } = require("@/lib/perf/perf-monitor");
+        const pm = PerfMonitor();
+        if (pm.isEnabled()) {
+          const prev = this.lastFrameTs || t;
+          const dt = t - prev;
+          this.lastFrameTs = t;
+          pm.recordDuration("raf.frame", dt); // ms per frame
+          const expected = 1000 / 60;
+          if (dt > expected * 1.5) pm.recordDuration("raf.long", dt);
+        }
+      } catch {}
 
       // Appelle chaque callback abonnée au frame
       for (const cb of this.subscribers) cb(t);

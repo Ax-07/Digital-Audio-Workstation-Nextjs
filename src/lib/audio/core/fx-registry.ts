@@ -173,7 +173,7 @@ export class FxRegistry {
         const v = pIn[k];
         if (v === undefined || v === null) continue;
         // Ignorés plus bas si remappés
-        pOut[k] = v as any;
+        pOut[k] = v;
       }
 
       if (type === "delay") {
@@ -193,18 +193,18 @@ export class FxRegistry {
           pOut.reverbDecay = Math.max(0.05, Math.min(1, pIn.decay));
           delete pOut.decay;
         }
-        if (typeof (pIn as any).duration === "number" && typeof pIn.reverbDuration !== "number") {
-          const d = (pIn as any).duration;
+        if (typeof (pIn).duration === "number" && typeof pIn.reverbDuration !== "number") {
+          const d = (pIn).duration;
           pOut.reverbDuration = Math.max(0.1, Math.min(5, d));
-          delete (pOut as any).duration;
+          delete (pOut).duration;
         }
-        if (typeof (pIn as any).length === "number" && typeof pIn.reverbDuration !== "number") {
-          const d = (pIn as any).length;
+        if (typeof (pIn).length === "number" && typeof pIn.reverbDuration !== "number") {
+          const d = (pIn).length;
           pOut.reverbDuration = Math.max(0.1, Math.min(5, d));
-          delete (pOut as any).length;
+          delete (pOut).length;
         }
         // mix non supporté pour l’instant → retirer pour ne pas induire l’UI en erreur
-        delete (pOut as any).mix;
+        delete (pOut).mix;
       } else if (type === "gain") {
         // gainDb / gain déjà acceptés tels quels
       } else if (type === "eq") {

@@ -1,4 +1,5 @@
 // src/lib/audio/core/transport-scheduler.ts
+import { PerfMonitor } from "@/lib/perf/perf-monitor";
 
 /* TransportScheduler
    - Écoute les messages d'horloge provenant du worklet clock-worklet
@@ -115,6 +116,12 @@ export class TransportScheduler {
    */
   private advanceTick(): void {
     const p = this._position;
+    // Dev perf: record transport jitter (client-only, gated by monitor)
+    const pm = PerfMonitor();
+    if (pm.isEnabled()) {
+      const nominalMs = 1000 * (60 / (this._bpm * PPQ));
+      pm.recordTransportTick(performance.now(), nominalMs);
+    }
 
     p.absoluteTicks++;
     p.tick++;
@@ -329,6 +336,14 @@ export class TransportScheduler {
         clipId: it.clipId,
         clipType: it.clipType
       };
+      const pm = PerfMonitor();
+      if (pm.isEnabled()) {
+        pm.recordEvent('transport.launch');
+        if (this._ctx) {
+          const delayMs = Math.max(0, (when - this._ctx.currentTime) * 1000);
+          pm.recordDuration('transport.launch.delay', delayMs);
+        }
+      }
       for (const l of this._launchListeners) l(ev);
     }
   }
