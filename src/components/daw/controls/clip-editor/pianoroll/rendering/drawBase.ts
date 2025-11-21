@@ -1,8 +1,9 @@
 // src/components/daw/controls/clip-editor/pianoroll/rendering/drawBase.ts
 
-import { drawKeyboard } from "../draw/drawKeyboard";
-import { drawGrid } from "../draw/drawGrid";
-import { drawNotes } from "../draw/drawNotes";
+import { drawKeyboard } from "./draw/drawKeyboard";
+import { drawGrid } from "./draw/drawGrid";
+import { drawNotes } from "./draw/drawNotes";
+import { drawTopBar } from "./draw/drawTopBar";
 import type { DraftNote } from "../types";
 import type { RenderContext, DrawState } from "./renderContext";
 
@@ -14,10 +15,12 @@ export function drawBaseCanvas(
   drawState: DrawState,
   culledBuffer: DraftNote[]
 ): { visible: number; total: number } {
-  const W = canvas.width;
-  const H = canvas.height;
-  const wCss = W / renderCtx.dpr;
-  const hCss = H / renderCtx.dpr;
+  const W = canvas.width;                   // Largeur du canvas en pixels
+  const H = canvas.height;                  // Hauteur du canvas en pixels
+  const wCss = W / renderCtx.dpr;           // Largeur en CSS pixels ( dpr: device pixel ratio )
+  const hCss = H / renderCtx.dpr;           // Hauteur en CSS pixels
+  const contentY = renderCtx.topBarHeight;  // Hauteur de la barre supérieure en CSS pixels
+  const contentH = hCss - contentY;         // Hauteur de la zone de contenu (keyboard + grid) en CSS pixels
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, W, H);
@@ -27,62 +30,103 @@ export function drawBaseCanvas(
   ctx.fillStyle = "#181818";
   ctx.fillRect(0, 0, wCss, hCss);
 
+  // Top bar (isolated draw)
+  drawTopBar(ctx, {
+    wCss,
+    keyWidth: renderCtx.keyWidth,
+    topBarHeight: renderCtx.topBarHeight,
+    timeToX: renderCtx.timeToX,
+    activeLoop: renderCtx.loopState ?? renderCtx.loop,
+    positionStart: renderCtx.positionStart,
+    clipLength: renderCtx.lengthBeats,
+  });
+
+  ctx.save();
+  // Keyboard gutter (below loop bar)
+  ctx.beginPath();
+  ctx.rect(0, contentY, renderCtx.keyWidth, contentH);
+  ctx.clip();
+  ctx.translate(0, contentY);
   // Keyboard gutter
   drawKeyboard(ctx, {
     wCss,
-    hCss,
+    hCss: contentH,
     keyWidth: renderCtx.keyWidth,
     scrollY: renderCtx.scrollY,
     pxPerSemitone: renderCtx.pxPerSemitone,
     minPitch: renderCtx.minPitch,
     maxPitch: renderCtx.maxPitch,
-    pitchToY: renderCtx.pitchToY,
+    // Translate applied: need local coordinate (global - contentY)
+    pitchToY: (p: number) => renderCtx.pitchToY(p) - contentY,
     pressedPitch: drawState.pressedPitch,
     hoverPitch: drawState.hoverPitch,
   });
+  ctx.restore();
 
   // Grid + notes area
   ctx.save();
-  ctx.translate(renderCtx.keyWidth, 0);
+  ctx.translate(renderCtx.keyWidth, contentY);
 
   drawGrid(ctx, {
     wCss,
-    hCss,
+    hCss: contentH,
     keyWidth: renderCtx.keyWidth,
     scrollX: renderCtx.scrollX,
+    scrollY: renderCtx.scrollY,
     pxPerBeat: renderCtx.pxPerBeat,
     grid: renderCtx.grid,
     timeToX: renderCtx.timeToX,
+    pxPerSemitone: renderCtx.pxPerSemitone,
+    minPitch: renderCtx.minPitch,
+    maxPitch: renderCtx.maxPitch,
+    pitchToY: (p: number) => renderCtx.pitchToY(p) - contentY,
   });
 
-  // Loop shading (top band)
-  ctx.fillStyle = "rgba(255,255,255,0.02)";
-  ctx.fillRect(0, 0, wCss - renderCtx.keyWidth, renderCtx.loopBarHeight);
-  ctx.strokeStyle = "#404040";
-  ctx.beginPath();
-  ctx.moveTo(0, renderCtx.loopBarHeight + 0.5);
-  ctx.lineTo(wCss - renderCtx.keyWidth, renderCtx.loopBarHeight + 0.5);
-  ctx.stroke();
-
-  // Loop region
+  // Full-height loop highlight inside grid (draw AFTER grid background so it is visible)
   const activeLoop = renderCtx.loopState ?? renderCtx.loop;
   if (activeLoop && activeLoop.end > activeLoop.start) {
-    const lx0 = renderCtx.timeToX(activeLoop.start) - renderCtx.keyWidth;
-    const lx1 = renderCtx.timeToX(activeLoop.end) - renderCtx.keyWidth;
-    ctx.fillStyle = "rgba(255,255,255,0.05)";
-    ctx.fillRect(lx0, 0, lx1 - lx0, hCss);
-    // Loop handles
-    ctx.fillStyle = "#FFD02F";
-    ctx.fillRect(lx0 - 2, 0, 4, renderCtx.loopBarHeight);
-    ctx.fillRect(lx1 - 2, 0, 4, renderCtx.loopBarHeight);
-    ctx.fillStyle = "rgba(255,208,47,0.12)";
-    ctx.fillRect(lx0, 0, Math.max(0, lx1 - lx0), renderCtx.loopBarHeight);
+    const gx0 = renderCtx.timeToX(activeLoop.start) - renderCtx.keyWidth; // local grid coords
+    const gx1 = renderCtx.timeToX(activeLoop.end) - renderCtx.keyWidth;
+    const gw = Math.max(0, gx1 - gx0);
+    // base subtle band
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.04)";
+    ctx.fillRect(gx0, 0, gw, contentH);
+
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(255,208,47,1)";
+    ctx.moveTo(gx0, 0);
+    ctx.lineTo(gx0, contentH);
+    ctx.moveTo(gx0 + gw, 0);
+    ctx.lineTo(gx0 + gw, contentH);
+    ctx.stroke();
+    ctx.restore();
   }
+
+  // Full-height position line (offset du clip)
+  const pxPos = renderCtx.timeToX(renderCtx.positionStart) - renderCtx.keyWidth;
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,0,0,0.9)";
+  ctx.beginPath();
+  ctx.moveTo(pxPos + 0.5, 0);
+  ctx.lineTo(pxPos + 0.5, contentH);
+  ctx.stroke();
+  ctx.restore();
+
+  // Full-height clip length line
+  const pxClipEnd = renderCtx.timeToX(renderCtx.lengthBeats) - renderCtx.keyWidth;
+  ctx.save();
+  ctx.strokeStyle = "rgba(0,255,0,0.9)";
+  ctx.beginPath();
+  ctx.moveTo(pxClipEnd + 0.5, -20);
+  ctx.lineTo(pxClipEnd + 0.5, contentH + 12);
+  ctx.stroke();
+  ctx.restore();
 
   // Viewport culling
   const x0Beat = Math.max(0, renderCtx.xToTime(renderCtx.keyWidth));
   const x1Beat = renderCtx.xToTime(wCss);
-  const y0Pitch = renderCtx.yToPitch(0);
+  const y0Pitch = renderCtx.yToPitch(contentY);
   const y1Pitch = renderCtx.yToPitch(hCss);
 
   culledBuffer.length = 0;
@@ -94,25 +138,30 @@ export function drawBaseCanvas(
     culledBuffer.push(n);
   }
 
+  // Local pitchToY inside grid context: subtract contentY because context is translated
+  const pitchToYLocal = (p: number) => renderCtx.pitchToY(p) - contentY;
   drawNotes(ctx, {
     notes: culledBuffer,
-    selectedIndices: renderCtx.selected,
+    selectedSet: renderCtx.selectedSet,
     hoverIndex: drawState.hoverNote,
     keyWidth: renderCtx.keyWidth,
     timeToX: renderCtx.timeToX,
-    pitchToY: renderCtx.pitchToY,
+    pitchToY: pitchToYLocal,
     pxPerBeat: renderCtx.pxPerBeat,
     pxPerSemitone: renderCtx.pxPerSemitone,
   });
 
   // Ghost note preview
+  // La zone d'activation de la note ghost se trouve dans le fichier pointerMoveHandler.ts aux lignes 223-232.
+  // La sensibilité du snap de la ghost note se règle dans le fichier useSnapGrid.ts aux lignes 7-14.
+  
   if (!drawState.pointerStart && drawState.ghost) {
-    const g = drawState.ghost;
+    const g = drawState.ghost; // { time, pitch }
     const gx = renderCtx.timeToX(g.time);
-    const gy = renderCtx.pitchToY(g.pitch);
+    const gy = renderCtx.pitchToY(g.pitch) - contentY;
     const gw = renderCtx.pxPerBeat / renderCtx.grid;
     ctx.globalAlpha = 0.35;
-    ctx.fillStyle = "#7aa2ff";
+    ctx.fillStyle = "#7aa2ff";  // ← Couleur bleue
     ctx.fillRect(gx - renderCtx.keyWidth, gy + 2, Math.max(8, gw - 2), Math.max(4, renderCtx.pxPerSemitone - 4));
     ctx.globalAlpha = 1;
   }
@@ -121,7 +170,7 @@ export function drawBaseCanvas(
   if (drawState.rectangleSelection) {
     const m = drawState.rectangleSelection;
     const rx = Math.min(m.x0, m.x1) - renderCtx.keyWidth;
-    const ry = Math.min(m.y0, m.y1);
+    const ry = Math.min(m.y0, m.y1) - contentY;
     const rw = Math.abs(m.x1 - m.x0);
     const rh = Math.abs(m.y1 - m.y0);
     ctx.fillStyle = "rgba(255,208,47,0.1)";
@@ -136,13 +185,13 @@ export function drawBaseCanvas(
   if (drawState.dragGuide) {
     const g = drawState.dragGuide;
     const vx = g.xCss - renderCtx.keyWidth + 0.5;
-    const hy = g.yCss + 0.5;
+    const hy = g.yCss - contentY + 0.5;
     ctx.save();
     ctx.strokeStyle = "rgba(255,208,47,0.4)";
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(vx, 0);
-    ctx.lineTo(vx, hCss);
+    ctx.lineTo(vx, contentH);
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(0, hy);
@@ -154,7 +203,7 @@ export function drawBaseCanvas(
     const lblTime = g.beat.toFixed(3);
     const lblPitch = String(g.pitch);
     ctx.fillText(lblTime, Math.max(0, Math.min(wCss - renderCtx.keyWidth - 40, vx + 6)), Math.max(10, hy - 6));
-    ctx.fillText(lblPitch, Math.max(0, Math.min(wCss - renderCtx.keyWidth - 30, vx + 6)), Math.min(hCss - 2, hy + 12));
+    ctx.fillText(lblPitch, Math.max(0, Math.min(wCss - renderCtx.keyWidth - 30, vx + 6)), Math.min(contentH - 2, hy + 12));
     ctx.restore();
   }
 
