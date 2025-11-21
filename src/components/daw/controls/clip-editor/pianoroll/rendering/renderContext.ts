@@ -13,9 +13,11 @@ export type RenderContext = {
   minPitch: number;                                         // Minimum MIDI pitch visible
   maxPitch: number;                                         // Maximum MIDI pitch visible
   grid: GridValue;                                    // Grid subdivision for snapping and drawing
-  loopBarHeight: number;                                    // Height of the loop bar area in pixels
+  topBarHeight: number;                                    // Height of the loop bar area in pixels
   lengthBeats: number;                                      // Total length of the clip in beats
+  positionStart: number;                                   // Current playhead position in beats
   selected: number[];                                       // Indices of currently selected notes
+  selectedSet: ReadonlySet<number>;                         // Fast lookup for selection during draw
   draftNotes: DraftNote[];                                  // Array of draft notes being edited
   loop: { start: number; end: number } | null;              // Loop points in beats, or null if no loop
   loopState: { start: number; end: number } | null;         // Temporary loop state during editing
@@ -24,6 +26,15 @@ export type RenderContext = {
   pitchToY: (pitch: number) => number;                      // Convert MIDI pitch to y-coordinate in pixels
   yToPitch: (yCss: number) => number;                       // Convert y-coordinate in pixels to MIDI pitch 
 };
+
+export type OverlayContext = {
+  dpr: number; 
+  active: boolean; 
+  position: number | undefined; 
+  playheadBeat: number | undefined; 
+  lengthBeats: number; timeToX: (b: number) => number;
+  lastPlayhead: number | null
+}
 
 export type DrawState = {
   pressedPitch: number | null;

@@ -10,15 +10,20 @@ export function drawOverlayCanvas(
   lengthBeats: number,
   timeToX: (beat: number) => number
 ) {
-  const ctx = overlay.getContext("2d");
+  const ctx = overlay.getContext(
+    "2d",
+    { willReadFrequently: true } as CanvasRenderingContext2DSettings
+  ) as CanvasRenderingContext2D | null;
   if (!ctx) return;
 
   const W = overlay.width;
   const H = overlay.height;
   const hCss = H / dpr;
 
+  // Reset transform and clear
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  // Apply DPR once per frame (cheap); state is reset above
   ctx.scale(dpr, dpr);
 
   // Position (startOffset) - trait vert vert
