@@ -209,10 +209,10 @@ export const SessionGrid = memo(function SessionGrid({
                 if (!clip && (finalProps.state ?? "empty") === "empty" && !finalProps.onClick) {
                   finalProps.onClick = () => {
                     const notes = [
-                      { pitch: 60, time: 0, duration: 0.95, velocity: 0.85 },
-                      { pitch: 64, time: 1, duration: 0.95, velocity: 0.85 },
-                      { pitch: 67, time: 2, duration: 0.95, velocity: 0.85 },
-                      { pitch: 72, time: 3, duration: 0.95, velocity: 0.85 },
+                      { id: "note1", pitch: 60, time: 0, duration: 0.95, velocity: 0.85 },
+                      { id: "note2", pitch: 64, time: 1, duration: 0.95, velocity: 0.85 },
+                      { id: "note3", pitch: 67, time: 2, duration: 0.95, velocity: 0.85 },
+                      { id: "note4", pitch: 72, time: 3, duration: 0.95, velocity: 0.85 },
                     ];
                     createMidiClip(trackId, r, notes, "MIDI Test");
                   };
