@@ -3,7 +3,7 @@
 import { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
 import { MidiTrack } from "@/lib/audio/sources/midi-track";
-import type { MidiInstrumentKind } from "@/lib/audio/sources/midi-track";
+import type { InstrumentKind } from "@/lib/audio/types";
 import type { MidiNote } from "@/lib/audio/types";
 import type { ActiveClip, MidiLoopInfo, InstrumentConfig } from "./types";
 import { makeMidiNoteId } from "./helpers";
@@ -75,7 +75,7 @@ export class MidiClipManager {
     const prevParams = this._lastParams.get(trackId);
 
     if (prevKind !== kindStr) {
-      mt.setInstrument(kindStr as MidiInstrumentKind);
+      mt.setInstrument(kindStr as InstrumentKind);
       this._lastKind.set(trackId, kindStr);
       
       if (kindStr === "dual-synth") {
