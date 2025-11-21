@@ -53,7 +53,7 @@
 // Utiliser scheduleSave à l’extérieur du store (ou via un middleware/subscribe dans ton bootstrap zustand/React), plutôt que dans chaque action.
 
 import { create } from "zustand/react";
-import type { ProjectDecl, TrackDecl, SessionViewDecl, SceneDecl, ClipDecl } from "@/lib/audio/types";
+import type { ProjectDecl, TrackDecl, SessionViewDecl, SceneDecl, ClipDecl, MidiNote } from "@/lib/audio/types";
 import { reconcileProject } from "@/lib/audio/core/virtual-graph";
 import { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
@@ -105,14 +105,14 @@ type ProjectActions = {
   createMidiClip: (
     trackId: string,
     sceneIndex: number,
-    notes: ReadonlyArray<{ pitch: number; time: number; duration: number; velocity?: number }>,
+    notes: ReadonlyArray<MidiNote>,
     name?: string
   ) => void;
 
   updateMidiClipNotes: (
     trackId: string,
     sceneIndex: number,
-    notes: ReadonlyArray<{ pitch: number; time: number; duration: number; velocity?: number }>
+    notes: ReadonlyArray<MidiNote>
   ) => void;
 
   updateMidiClipLength: (trackId: string, sceneIndex: number, lengthBeats: number) => void;
