@@ -80,10 +80,13 @@ export const ClipEditor = memo(function ClipEditor() {
 
   /**
    * Effet : quand on ouvre un clip, on force la sélection de piste
-   *          pour aligner le reste de l’UI (device panel, mixer, etc.)
+   *          pour aligner le reste de l'UI (device panel, mixer, etc.)
    */
   useEffect(() => {
-    if (selected?.trackId) setSelectedTrack(selected.trackId);
+    if (selected?.trackId) {
+      console.log("🎯 ClipEditor - selected:", selected);
+      setSelectedTrack(selected.trackId);
+    }
   }, [selected, setSelectedTrack]);
 
   /** Si aucun clip n’est sélectionné, ne rien afficher. */
@@ -158,8 +161,13 @@ const MidiClipPanel = memo(function MidiClipPanel({
   loop: { start: number; end: number } | null;
   lengthBeats?: number;
 }) {
-  /** Nom local editable dans l’input */
+  /** Nom local editable dans l'input */
   const [localName, setLocalName] = useState(name);
+
+  // Debug: log trackId
+  useEffect(() => {
+    console.log("📋 MidiClipPanel - trackId:", trackId, "sceneIndex:", sceneIndex);
+  }, [trackId, sceneIndex]);
 
   /** Resynchroniser l'input si on change de clip */
   useEffect(() => {
@@ -227,6 +235,7 @@ const MidiClipPanel = memo(function MidiClipPanel({
         lengthBeats={lengthBeats ?? 4}
         loop={loop}
         onLoopChange={handleLoopChange}
+        trackId={trackId}
       />
 
       {/* Contrôle de longueur de clip en beats */}
