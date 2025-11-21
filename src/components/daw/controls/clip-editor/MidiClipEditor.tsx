@@ -47,7 +47,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { getSessionPlayer } from "@/lib/audio/core/session-player";
 
 // 👇 petit hook interne pour suivre le beat global
@@ -152,13 +152,12 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
     return clip;
   }, [clip]);
 
-  /** Nom local editable dans l’input */
-  const [localName, setLocalName] = useState(clip?.name ?? "");
-
-  // Quand on change de clip, resynchroniser le champ texte
-  useEffect(() => {
-    setLocalName(clip?.name ?? "");
-  }, [clip?.name]);
+  /** 
+   * Nom local editable - on utilise une key pour forcer le reset de l'input 
+   * quand on change de clip, évitant ainsi le setState dans un effect 
+   */
+  const clipKey = selected ? `${selected.trackId}:${selected.sceneIndex}` : "no-clip";
+  const [localName, setLocalName] = useState("");
 
   /**
    * Effet : quand on ouvre un clip, on force la sélection de piste
@@ -274,8 +273,9 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
                   Nom
                 </Label>
                 <Input
+                  key={clipKey} // 👈 Force reset quand on change de clip
                   id="clip-name"
-                  value={localName}
+                  defaultValue={clip?.name ?? ""}
                   onChange={(e) => setLocalName(e.target.value)}
                   onBlur={() => selected && renameClip(selected.trackId, selected.sceneIndex, localName)}
                   className="h-6 text-[10px] bg-neutral-950/50 px-2"
@@ -413,7 +413,7 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
                 loop={loop}
                 onLoopChange={onLoopChange}
                 position={position}
-                playheadBeat={localPlayheadBeat ?? undefined}
+                getPlayheadBeat={localPlayheadBeat !== null ? () => localPlayheadBeat : undefined}
                 followPlayhead={isPlaying}
                 active={isPlaying}
                 grid={grid}
