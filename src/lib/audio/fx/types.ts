@@ -31,7 +31,7 @@ export interface EffectParamsMap {
   chorus: { rate: number; depth: number; delay: number; mix: number };
   "stereo-widener": { width: number };
   "analyser-tap": Partial<import("./spectrum-analyser/analyser-tap").AnalyserTapParams>;
-  analyser: Partial<import("./spectrum-analyser/ableton-analyser-engine").AbletonAnalyserOptions>;
+  analyser: Partial<import("./spectrum-analyser/ableton-analyser-engine").AbletonAnalyserProOptions>;
 }
 
 export type AnyEffectParams = EffectParamsMap[EffectKind];
