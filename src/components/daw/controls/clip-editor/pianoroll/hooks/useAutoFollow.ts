@@ -1,6 +1,7 @@
 // src/components/daw/controls/clip-editor/pianoroll/hooks/useAutoFollow.ts
 
 import { useEffect, useRef } from "react";
+import { getGlobalRaf } from "@/lib/audio/core/global-raf";
 
 export function useAutoFollow(
   active: boolean,
@@ -14,67 +15,41 @@ export function useAutoFollow(
   draw: () => void,
   wrapRef: React.RefObject<HTMLDivElement | null>
 ) {
-  const rafIdRef = useRef<number | null>(null);
+  // Utilise la boucle rAF globale pour éviter une boucle dédiée
+  const unsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    // Désabonne si conditions non remplies
     if (!active || !followPlayhead || !getPlayheadBeat) {
-      if (rafIdRef.current != null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
+      if (unsubRef.current) unsubRef.current();
+      unsubRef.current = null;
       return;
     }
-
-    const loop = () => {
+    const raf = getGlobalRaf();
+    // Marges pour éviter scroll excessif (hysteresis)
+    const margin = 24;
+    unsubRef.current = raf.subscribe(() => {
       const playheadBeat = getPlayheadBeat();
-      if (typeof playheadBeat === "number") {
-        const wrap = wrapRef.current;
-        if (wrap) {
-          const px = timeToX(playheadBeat) - keyWidth;
-          const margin = 24;
-          const viewW = wrap.clientWidth;
-
-          if (viewW > 0) {
-            if (px > viewW - margin) {
-              const target = Math.min(
-                totalPxX - viewW,
-                scrollX + (px - (viewW - margin)),
-              );
-              if (!Number.isNaN(target) && Number.isFinite(target)) {
-                setScrollX(Math.max(0, target));
-              }
-            } else if (px < margin) {
-              const target = Math.max(0, scrollX + (px - margin));
-              if (!Number.isNaN(target) && Number.isFinite(target)) {
-                setScrollX(Math.max(0, target));
-              }
-            }
-          }
-        }
-        draw();
+      if (typeof playheadBeat !== "number") return;
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const viewW = wrap.clientWidth;
+      if (viewW <= 0) return;
+      const px = timeToX(playheadBeat) - keyWidth;
+      let target: number | null = null;
+      if (px > viewW - margin) {
+        target = Math.min(totalPxX - viewW, scrollX + (px - (viewW - margin)));
+      } else if (px < margin) {
+        target = Math.max(0, scrollX + (px - margin));
       }
-
-      rafIdRef.current = requestAnimationFrame(loop);
-    };
-
-    rafIdRef.current = requestAnimationFrame(loop);
-
+      if (target != null && !Number.isNaN(target) && Number.isFinite(target) && target !== scrollX) {
+        setScrollX(target);
+      }
+      draw();
+    });
     return () => {
-      if (rafIdRef.current != null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
+      if (unsubRef.current) unsubRef.current();
+      unsubRef.current = null;
     };
-  }, [
-    active,
-    followPlayhead,
-    getPlayheadBeat,
-    timeToX,
-    keyWidth,
-    totalPxX,
-    scrollX,
-    setScrollX,
-    draw,
-    wrapRef,
-  ]);
+  }, [active, followPlayhead, getPlayheadBeat, timeToX, keyWidth, totalPxX, scrollX, setScrollX, draw, wrapRef]);
 }
