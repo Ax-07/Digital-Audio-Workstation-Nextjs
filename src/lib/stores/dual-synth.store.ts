@@ -1,22 +1,50 @@
 // src/lib/stores/dual-synth.store.ts
 
 import { create } from "zustand/react";
-import type { DualSynthParams } from "@/lib/audio/sources/dual-osc-synth";
+import type { DualSynthParams } from "@/lib/audio/sources/synth/dual-osc-synth";
 import type { EnvelopeMod } from "@/lib/audio/types";
 import { normalizeEnvelope } from "@/lib/audio/envelopes/generic-envelope";
 
+/**
+ * State for the dual synth store.
+ */
 export type DualSynthState = {
   byTrack: Readonly<Record<string, Required<DualSynthParams>>>;
 };
 
+/**
+ * Actions for the dual synth store.
+ */
 export type DualSynthActions = {
+  /**
+   * Get the dual synth parameters for a specific track.
+   * @param trackId 
+   * @returns 
+   */
   getParams: (trackId: string) => Required<DualSynthParams>;
+  /**
+   * Set the dual synth parameters for a specific track.
+   * @param trackId 
+   * @param params 
+   * @returns 
+   */
   setParams: (trackId: string, params: Partial<DualSynthParams>) => void;
+  /**
+   * Reset the dual synth parameters for a specific track to default.
+   * @param trackId 
+   * @returns 
+   */
   resetParams: (trackId: string) => void;
 };
 
+/**
+ * Combined type for the dual synth store.
+ */
 export type DualSynthStore = DualSynthState & DualSynthActions;
 
+/**
+ * Default dual synth parameters.
+ */
 const DEFAULT: Required<DualSynthParams> = {
   waveformA: "sawtooth",
   waveformB: "square",
@@ -56,6 +84,9 @@ const DEFAULT: Required<DualSynthParams> = {
   },
 };
 
+/**
+ * Zustand store for managing dual synth parameters.
+ */
 export const useDualSynthStore = create<DualSynthStore>((set, get) => ({
   byTrack: {},
   getParams: (trackId) => get().byTrack[trackId] ?? DEFAULT,

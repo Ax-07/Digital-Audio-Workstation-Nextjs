@@ -54,6 +54,7 @@
 
 import { create } from "zustand/react";
 import type { ProjectDecl, TrackDecl, SessionViewDecl, SceneDecl, ClipDecl, MidiNote } from "@/lib/audio/types";
+import { useInstrumentStore } from "@/lib/stores/instrument.store"; // PERF: utilisé pour notes par défaut drum-machine
 import { reconcileProject } from "@/lib/audio/core/virtual-graph";
 import { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
@@ -480,8 +481,23 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
      * - lengthBeats initial à 4 temps (1 mesure en 4/4)
      */
     createMidiClip: (trackId, sceneIndex, notes, name) => {
+      // PERF: Injection de notes par défaut pour une piste drum-machine afin d'offrir un retour immédiat.
+      let finalNotes = notes;
+      if (!finalNotes || finalNotes.length === 0) {
+        try {
+          const kind = useInstrumentStore.getState().getKind(trackId);
+          if (kind === "drum-machine") {
+            const makeId = () => `n_${Math.random().toString(36).slice(2, 9)}`;
+            finalNotes = [
+              { id: makeId(), pitch: 36, time: 0, duration: 0.95, velocity: 0.92 }, // Kick
+              { id: makeId(), pitch: 38, time: 1, duration: 0.95, velocity: 0.85 }, // Snare
+              { id: makeId(), pitch: 42, time: 2, duration: 0.95, velocity: 0.78 }, // Hat
+            ];
+          }
+        } catch { /* ignore instrument store access erreurs */ }
+      }
       const current = get().project;
-      const next = createMidiClipReducer(current, trackId, sceneIndex, notes, name);
+      const next = createMidiClipReducer(current, trackId, sceneIndex, finalNotes, name);
       pushHistoryAndSave(next);
     },
 

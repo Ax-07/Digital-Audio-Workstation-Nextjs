@@ -1,7 +1,7 @@
 // src/lib/stores/synth.store.ts
 
 import { create } from "zustand/react";
-import type { SimpleSynthParams } from "@/lib/audio/sources/simple-synth";
+import type { SimpleSynthParams } from "@/lib/audio/sources/synth/simple-synth";
 import { normalizeEnvelope } from "@/lib/audio/envelopes/generic-envelope";
 
 /**
