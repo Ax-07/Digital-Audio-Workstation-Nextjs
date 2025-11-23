@@ -26,14 +26,16 @@ import type { MidiNote } from "@/lib/audio/types";
 import {
   SimpleSynth,
   type SimpleSynthParams,
-} from "@/lib/audio/sources/simple-synth";
+} from "@/lib/audio/sources/synth/simple-synth";
 import {
   DualOscSynth,
   type DualSynthParams,
-} from "@/lib/audio/sources/dual-osc-synth";
-import { Sampler } from "@/lib/audio/sources/sampler";
+} from "@/lib/audio/sources/synth/dual-osc-synth";
+import { Sampler } from "@/lib/audio/sources/sampler/sampler";
 import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
 import type { InstrumentKind } from "@/lib/audio/types";
+import { drumMachine } from "@/lib/audio/drum-machine/drum-machine";
+import { useDrumMachineStore } from "@/lib/stores/drum-machine.store";
 
 export class MidiTrack {
   readonly id: string;
@@ -90,6 +92,11 @@ export class MidiTrack {
       this.sampler = opts?.sampler ?? null;
       this.synth = null;
       this.dual = null;
+    } else if (this.kind === "drum-machine") {
+      // DrumMachine est un singleton externe routé via MixerCore (déjà géré côté DrumMachine)
+      this.synth = null;
+      this.dual = null;
+      this.sampler = null;
     }
   }
 
@@ -148,10 +155,14 @@ export class MidiTrack {
       this.dual = new DualOscSynth((opts?.synthParams ?? {}) as DualSynthParams);
       this.synth = null;
       this.sampler = null;
-    } else {
+    } else if (kind === "sampler") {
       this.sampler = opts?.sampler ?? null;
       this.synth = null;
       this.dual = null;
+    } else if (kind === "drum-machine") {
+      this.synth = null;
+      this.dual = null;
+      this.sampler = null;
     }
   }
 
@@ -202,6 +213,16 @@ export class MidiTrack {
       this.dual.noteOn(pitch, velocity, dest, isPreview);
     } else if (this.kind === "sampler") {
       this.sampler?.trigger(pitch, velocity, dest);
+    } else if (this.kind === "drum-machine") {
+      // Map pitch → instrument (GM-like): 36=kick, 38=snare, 42=hat (fallback hat)
+      const inst = this.mapPitchToDrum(pitch);
+      const vel127 = Math.max(1, Math.min(127, Math.round((velocity ?? 0.8) * 127)));
+      const ctx = AudioEngine.ensure().context;
+      if (!ctx) return;
+      const when = ctx.currentTime;
+      // DrumMachine gère son propre routing vers MixerCore via trackId
+      try { void drumMachine.ensure(); } catch {}
+      try { drumMachine.playSound(inst, vel127, when, this.id); } catch {}
     }
   }
 
@@ -237,131 +258,132 @@ export class MidiTrack {
   ): { stop: () => void } {
     this.ensureRouting();
 
-    /* ---------------- DualSynth : scheduling manuel haute précision ---------------- */
+    const kind = this.kind;
+    switch (kind) {
+      case "dual-synth": {
+        if (!this.dual) this.dual = new DualOscSynth();
 
-    if (this.kind === "dual-synth") {
-      if (!this.dual) this.dual = new DualOscSynth();
+        const ctx = AudioEngine.ensure().context;
+        const dest = this.destination;
+        if (!ctx || !dest) return { stop: () => { } };
 
-      const ctx = AudioEngine.ensure().context;
-      const dest = this.destination;
-      if (!ctx || !dest) return { stop: () => { } };
+        const secPerBeat = 60 / bpm;
+        const events = clip.notes.flatMap((n) => [
+          { type: "on" as const, time: when + n.time * secPerBeat, pitch: n.pitch, velocity: n.velocity ?? 0.8 },
+          { type: "off" as const, time: when + (n.time + n.duration) * secPerBeat, pitch: n.pitch },
+        ]);
+        events.sort((a, b) => a.time - b.time);
 
-      const secPerBeat = 60 / bpm;
+        const sched = TransportScheduler.ensure();
+        const lookahead = Math.min(0.05, secPerBeat / 4);
+        let idx = 0;
 
-      // On transforme la liste des notes en événements on/off triés par temps.
-      const events = clip.notes.flatMap((n) => [
-        { type: "on" as const, time: when + n.time * secPerBeat, pitch: n.pitch, velocity: n.velocity ?? 0.8 },
-        { type: "off" as const, time: when + (n.time + n.duration) * secPerBeat, pitch: n.pitch },
-      ]);
-      events.sort((a, b) => a.time - b.time);
+        const unsub = sched.subscribe(() => {
+          const now = ctx.currentTime;
+          while (idx < events.length && events[idx]!.time <= now + lookahead) {
+            const ev = events[idx]!;
+            try {
+              if (ev.type === "on") this.dual!.noteOn(ev.pitch, ev.velocity, dest);
+              else this.dual!.noteOff(ev.pitch);
+            } catch { }
+            idx++;
+          }
+          if (idx >= events.length) {
+            try { unsub(); } catch { }
+          }
+        });
 
-      // Streaming via TransportScheduler
-      const sched = TransportScheduler.ensure();
-      const lookahead = Math.min(0.05, secPerBeat / 4);
-      let idx = 0;
-
-      const unsub = sched.subscribe(() => {
-        const now = ctx.currentTime;
-        while (idx < events.length && events[idx]!.time <= now + lookahead) {
-          const ev = events[idx]!;
-          try {
-            if (ev.type === "on") this.dual!.noteOn(ev.pitch, ev.velocity, dest);
-            else this.dual!.noteOff(ev.pitch);
-          } catch { }
-          idx++;
-        }
-        if (idx >= events.length) {
-          try {
-            unsub();
-          } catch { }
-        }
-      });
-
-      const stop = () => {
-        try {
-          unsub();
-        } catch { }
-      };
-      this.activeStop = stop;
-      return { stop };
-    }
-
-    /* ---------------- Sampler : scheduling simple via setTimeout ---------------- */
-
-    if (this.kind === "sampler") {
-      const ctx = AudioEngine.ensure().context;
-      const dest = this.destination;
-      if (!ctx || !dest) return { stop: () => { } };
-
-      const secPerBeat = 60 / bpm;
-      const timers: number[] = [];
-
-      for (const n of clip.notes) {
-        const delayMs = Math.max(
-          0,
-          Math.round(
-            (when + n.time * secPerBeat - ctx.currentTime) * 1000,
-          ),
-        );
-        const h = window.setTimeout(() => {
-          try {
-            this.sampler?.trigger(n.pitch, n.velocity ?? 0.8, dest);
-          } catch { }
-        }, delayMs);
-        timers.push(h);
+        const stop = () => { try { unsub(); } catch { } };
+        this.activeStop = stop;
+        return { stop };
       }
+      case "sampler": {
+        const ctx = AudioEngine.ensure().context;
+        const dest = this.destination;
+        if (!ctx || !dest) return { stop: () => { } };
 
-      const stop = () => {
-        for (const id of timers) {
-          try {
-            window.clearTimeout(id);
-          } catch { }
+        const secPerBeat = 60 / bpm;
+        const timers: number[] = [];
+
+        for (const n of clip.notes) {
+          const delayMs = Math.max(0, Math.round((when + n.time * secPerBeat - ctx.currentTime) * 1000));
+          const h = window.setTimeout(() => {
+            try { this.sampler?.trigger(n.pitch, n.velocity ?? 0.8, dest); } catch { }
+          }, delayMs);
+          timers.push(h);
         }
-      };
-      this.activeStop = stop;
-      return { stop };
+
+        const stop = () => { for (const id of timers) { try { window.clearTimeout(id); } catch { } } };
+        this.activeStop = stop;
+        return { stop };
+      }
+      case "simple-synth": {
+        if (!this.synth) this.synth = new SimpleSynth();
+        const ctx = AudioEngine.ensure().context;
+        const dest = this.destination;
+        if (!ctx || !dest) return { stop: () => { } };
+
+        const secPerBeat = 60 / bpm;
+        const events = clip.notes.flatMap(n => ([
+          { type: "on" as const, time: when + n.time * secPerBeat, pitch: n.pitch, velocity: n.velocity ?? 0.8 },
+          { type: "off" as const, time: when + (n.time + n.duration) * secPerBeat, pitch: n.pitch, velocity: 0 },
+        ]));
+        events.sort((a, b) => a.time - b.time);
+
+        let idx = 0;
+        const sched = TransportScheduler.ensure();
+        const lookahead = Math.min(0.05, (60 / bpm) / 4);
+
+        const unsub = sched.subscribe(() => {
+          const now = ctx.currentTime;
+          while (idx < events.length && events[idx]!.time <= now + lookahead) {
+            const ev = events[idx]!;
+            try {
+              if (ev.type === "on") this.synth!.noteOn(ev.pitch, ev.velocity, dest);
+              else this.synth!.noteOff(ev.pitch);
+            } catch { }
+            idx++;
+          }
+          if (idx >= events.length) { try { unsub(); } catch { } }
+        });
+
+        const stop = () => { try { unsub(); } catch { } };
+        this.activeStop = stop;
+        return { stop };
+      }
+      case "drum-machine": {
+        const ctx = AudioEngine.ensure().context;
+        if (!ctx) return { stop: () => { } };
+
+        const secPerBeat = 60 / bpm;
+        const events = clip.notes.map(n => ({ time: when + n.time * secPerBeat, pitch: n.pitch, velocity: n.velocity ?? 0.8 }));
+        events.sort((a, b) => a.time - b.time);
+
+        const sched = TransportScheduler.ensure();
+        const lookahead = Math.min(0.05, (60 / bpm) / 4);
+        let idx = 0;
+
+        const unsub = sched.subscribe(() => {
+          const now = ctx.currentTime;
+          while (idx < events.length && events[idx]!.time <= now + lookahead) {
+            const ev = events[idx]!;
+            try {
+              const inst = this.mapPitchToDrum(ev.pitch);
+              const vel127 = Math.max(1, Math.min(127, Math.round(ev.velocity * 127)));
+              drumMachine.playSound(inst, vel127, ev.time, this.id);
+            } catch { }
+            idx++;
+          }
+          if (idx >= events.length) { try { unsub(); } catch { } }
+        });
+
+        const stop = () => { try { unsub(); } catch { } };
+        this.activeStop = stop;
+        return { stop };
+      }
+      default:
+        return { stop: () => { } };
     }
-
-    /* ---------------- SimpleSynth : Scheduling via TransportScheduler ---------------- */
-
-    if (this.kind === "simple-synth") {
-      if (!this.synth) this.synth = new SimpleSynth();
-      const ctx = AudioEngine.ensure().context;
-      const dest = this.destination;
-      if (!ctx || !dest) return { stop: () => { } };
-
-      const secPerBeat = 60 / bpm;
-      const events = clip.notes.flatMap(n => ([
-        { type: "on" as const, time: when + n.time * secPerBeat, pitch: n.pitch, velocity: n.velocity ?? 0.8 },
-        { type: "off" as const, time: when + (n.time + n.duration) * secPerBeat, pitch: n.pitch, velocity: 0 },
-      ]));
-
-      events.sort((a, b) => a.time - b.time);
-
-      let idx = 0;
-      const sched = TransportScheduler.ensure();
-      const lookahead = Math.min(0.05, (60 / bpm) / 4);
-
-      const unsub = sched.subscribe(() => {
-        const now = ctx.currentTime;
-        while (idx < events.length && events[idx]!.time <= now + lookahead) {
-          const ev = events[idx]!;
-          try {
-            if (ev.type === "on") this.synth!.noteOn(ev.pitch, ev.velocity, dest);
-            else this.synth!.noteOff(ev.pitch);
-          } catch { }
-          idx++;
-        }
-        if (idx >= events.length) { try { unsub(); } catch { } }
-      });
-
-      const stop = () => { try { unsub(); } catch { } };
-      this.activeStop = stop;
-      return { stop };
-    }
-
-    // Fallback : si aucun instrument reconnu, retour vide
-    return { stop: () => { } };
   }
 
   /** refreshClip() — hook futur pour recalculer un clip quand les params changent. */
@@ -383,6 +405,21 @@ export class MidiTrack {
       if (this.kind === "simple-synth") this.synth?.stopAllVoices();
       else if (this.kind === "dual-synth") this.dual?.stopAllVoices();
     } catch { }
+  }
+
+  /** Map MIDI pitch to a drum instrument */
+  private mapPitchToDrum(pitch: number): "kick" | "snare" | "hh" {
+    // Track-level configurable mapping (fallback to GM-like defaults)
+    try {
+      const map = useDrumMachineStore.getState().getMapping(this.id);
+      if (map.kick.includes(pitch)) return "kick";
+      if (map.snare.includes(pitch)) return "snare";
+      if (map.hh.includes(pitch)) return "hh";
+    } catch {}
+    // Defaults
+    if (pitch === 36 || pitch === 35) return "kick";
+    if (pitch === 38 || pitch === 40) return "snare";
+    return "hh";
   }
 }
 
