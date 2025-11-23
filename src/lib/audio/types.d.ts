@@ -215,7 +215,7 @@ export type MidiNote = {
  * Type d'instrument MIDI disponible.
  * Source unique de vérité pour tous les types d'instruments du DAW.
  */
-export type InstrumentKind = "simple-synth" | "dual-synth" | "sampler";
+export type InstrumentKind = "simple-synth" | "dual-synth" | "sampler" | "drum-machine";
 
 /**
  * Modulation par envelope générique.
