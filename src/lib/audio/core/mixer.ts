@@ -144,6 +144,14 @@ export class MixerCore {
   }
 
   /**
+   * Accès direct (lecture seule) à la TrackNodeChain d’une piste pour instrumentation / meters.
+   * À utiliser pour récupérer analyser ou stereo analysers sans créer de nodes supplémentaires.
+   */
+  getTrackChain(id: string): TrackNodeChain | null {
+    return this.tracks.get(id) ?? null;
+  }
+
+  /**
    * S’assure que les retours A/B existent.
    * - Crée deux TrackNodeChain (returnA, returnB) si nécessaires
    * - Reconnecte tous les sends de pistes vers les inputs des retours
@@ -166,6 +174,16 @@ export class MixerCore {
     const rA = this.returns.get("A")!;
     const rB = this.returns.get("B")!;
     for (const [, t] of this.tracks) t.ensureSendsConnected(rA.input, rB.input);
+  }
+
+  /**
+   * Expose l'input d'un bus de retour (A/B) pour des connexions externes (sends custom).
+   * Assure la création des retours si nécessaire.
+   */
+  getReturnInput(target: "A" | "B"): AudioNode | null {
+    this.ensureReturns();
+    const r = this.returns.get(target);
+    return r ? r.input : null;
   }
 
   /**

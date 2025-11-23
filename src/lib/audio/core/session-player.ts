@@ -235,6 +235,9 @@ class SessionPlayer {
     // Configurer l'instrument
     const config = await this.getInstrumentConfig(trackId);
     if (config) {
+      // IMPORTANT: Créer/assurer la MidiTrack avec la bonne config AVANT scheduling
+      // pour éviter la création par défaut en simple-synth.
+      this._midiManager.getMidiTrack(trackId, config);
       this._midiManager.configureInstrument(trackId, config);
     }
 
@@ -548,6 +551,12 @@ class SessionPlayer {
         return {
           kind: "dual-synth",
           params: useDualSynthStore.getState().getParams(trackId),
+        };
+      } else if (kind === "drum-machine") {
+        // Pas de params spécifiques pour l’instant
+        return {
+          kind: "drum-machine",
+          params: {},
         };
       } else {
         const { useSynthStore } = await import("@/lib/stores/synth.store");

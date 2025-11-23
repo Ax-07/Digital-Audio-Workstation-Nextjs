@@ -641,6 +641,51 @@ export class TrackNodeChain {
   }
 
   /**
+   * Retourne l'AnalyserNode interne (post-inserts / post-return FX mais pré-pan).
+   * Usage: affichage spectre/mètre unifié sans créer un analyser supplémentaire.
+   */
+  getAnalyserNode(): AnalyserNode {
+    return this.analyser;
+  }
+
+  /**
+   * Fournit (et mémorise) une paire d'AnalyserNodes stéréo passive post-pan.
+   * Crée un ChannelSplitter si nécessaire et retourne {left,right}.
+   */
+  getStereoAnalysers(opts?: { fftSize?: number; smoothing?: number }): { left: AnalyserNode; right: AnalyserNode } {
+    // Stockage paresseux sur l'instance via symbol interne.
+    // Symbol static (lazily created) utilisé comme clé sur l'instance.
+    // Utilise un symbol simple plutôt que unique symbol pour compat TS/lint.
+    const holder = TrackNodeChain as unknown as { __stereoKey?: symbol };
+    if (!holder.__stereoKey) {
+      holder.__stereoKey = Symbol('stereo');
+    }
+    const key = holder.__stereoKey;
+    const anySelf = this as unknown as Record<symbol, { splitter: ChannelSplitterNode; left: AnalyserNode; right: AnalyserNode } | undefined>;
+    let stereo = anySelf[key];
+    if (!stereo) {
+      const splitter = this.ctx.createChannelSplitter(2);
+      // Branche passive: panNode → splitter
+      try { this.panNode.connect(splitter); } catch {}
+      const left = this.ctx.createAnalyser();
+      const right = this.ctx.createAnalyser();
+      splitter.connect(left, 0);
+      splitter.connect(right, 1);
+      stereo = { splitter, left, right };
+      anySelf[key] = stereo;
+    }
+    if (opts?.fftSize) {
+      const fft = Math.min(1024, Math.max(128, opts.fftSize));
+      stereo.left.fftSize = fft; stereo.right.fftSize = fft;
+    }
+    if (opts?.smoothing !== undefined) {
+      stereo.left.smoothingTimeConstant = opts.smoothing;
+      stereo.right.smoothingTimeConstant = opts.smoothing;
+    }
+    return { left: stereo.left, right: stereo.right };
+  }
+
+  /**
    * Libération et nettoyage de la chaîne de nodes.
    * On déconnecte tout ce qu’on peut et on marque les envois comme non connectés.
    */
