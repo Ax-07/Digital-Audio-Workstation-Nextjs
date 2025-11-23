@@ -32,6 +32,8 @@ import { useUiStore } from "@/lib/stores/ui.store";
 import { useProjectStore } from "@/lib/stores/project.store";
 import type { MidiNote } from "@/lib/audio/types";
 import { PianoRoll } from "./pianoroll/PianoRoll";
+import { DrumClipEditor } from "./drumroll/DrumClipEditor";
+import { useDrumMachineStore } from "@/lib/stores/drum-machine.store";
 
 export const ClipEditor = memo(function ClipEditor() {
   /** Clip sélectionné côté UI (track + scène) */
@@ -92,6 +94,9 @@ export const ClipEditor = memo(function ClipEditor() {
   /** Si aucun clip n’est sélectionné, ne rien afficher. */
   if (!selected) return null;
 
+  // Heuristique: si cette piste a une config drums dans le store, on propose DrumClipEditor
+  const hasDrumMapping = !!useDrumMachineStore.getState().byTrack[selected.trackId];
+
   return (
     <div className="mt-2 rounded-sm border border-neutral-700 bg-neutral-800 p-3">
       {!clip ? (
@@ -105,6 +110,9 @@ export const ClipEditor = memo(function ClipEditor() {
           </button>
         </div>
       ) : clip.type === "midi" ? (
+        hasDrumMapping ? (
+          <DrumClipEditor />
+        ) : (
         <MidiClipPanel
           key={clip.id}
           name={clip.name ?? clip.id}
@@ -122,7 +130,7 @@ export const ClipEditor = memo(function ClipEditor() {
               : null
           }
           lengthBeats={clip.lengthBeats}
-        />
+        />)
       ) : (
         <AudioClipEditor
           key={clip.id}
