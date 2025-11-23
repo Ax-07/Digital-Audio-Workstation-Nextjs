@@ -16,7 +16,7 @@ export async function createEffect(ctx: AudioContext, kind: EffectKind): Promise
     ChorusEffect,
     StereoWidenerEffect,
     AnalyserTapEffect,
-  } = await import("@/lib/audio/effects");
+  } = await import("@/lib/audio/fx");
 
   const map: Record<EffectKind, new (ctx: AudioContext) => AudioEffect> = {
     "delay": DelayEffect,
