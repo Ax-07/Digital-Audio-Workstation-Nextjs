@@ -43,7 +43,7 @@ export type AudioClipOptions = {
  * Configuration d'instrument pour une piste MIDI.
  */
 export type InstrumentConfig = {
-  kind: "simple-synth" | "dual-synth";
+  kind: "simple-synth" | "dual-synth" | "drum-machine";
   params: Record<string, unknown>;
 };
 

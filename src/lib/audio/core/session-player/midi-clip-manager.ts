@@ -80,15 +80,19 @@ export class MidiClipManager {
       
       if (kindStr === "dual-synth") {
         mt.configureDual(config.params);
-      } else {
+      } else if (kindStr === "simple-synth") {
         mt.configureSynth(config.params);
+      } else if (kindStr === "drum-machine") {
+        // Aucun param à appliquer pour l’instant
       }
       this._lastParams.set(trackId, paramsStr);
     } else if (prevParams !== paramsStr) {
       if (kindStr === "dual-synth") {
         mt.configureDual(config.params);
-      } else {
+      } else if (kindStr === "simple-synth") {
         mt.configureSynth(config.params);
+      } else if (kindStr === "drum-machine") {
+        // No-op
       }
       this._lastParams.set(trackId, paramsStr);
     }

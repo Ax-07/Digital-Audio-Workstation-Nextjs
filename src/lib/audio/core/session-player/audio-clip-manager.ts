@@ -1,6 +1,6 @@
 // src/lib/audio/core/session-player/audio-clip-manager.ts
 
-import { SampleSource } from "@/lib/audio/sources/sample-source";
+import { SampleSource } from "@/lib/audio/sources/sampler/sample-source";
 import type { ActiveClip, AudioClipOptions } from "./types";
 import { makePoolKey } from "./helpers";
 
