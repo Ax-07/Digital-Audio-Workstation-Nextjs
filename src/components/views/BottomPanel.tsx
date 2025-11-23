@@ -13,6 +13,9 @@ import { useInstrumentStore } from "@/lib/stores/instrument.store";
 // import { ClipEditor } from "../daw/controls/clip-editor/ClipEditor";
 import { InstrumentKind } from "@/lib/audio/types";
 import { MidiClipEditor } from "../daw/controls/midi-clip-editor-v2/midi-clip-editor";
+import { DrumsRack } from "../instruments/DrumsRackPanel";
+import { DrumMachinePanel } from "@/components/instruments/DrumMachinePanel";
+import { useDrumMachineStore } from "@/lib/stores/drum-machine.store";
 
 const BottomPanelComponent = () => {
   const selectedId = useUiStore((s) => s.selectedTrackId);
@@ -39,8 +42,21 @@ const BottomPanelComponent = () => {
         </TabsContent>
         <TabsContent value="device">
           <div className="space-y-2">
-            <DeviceSelector trackId={selectedId} kind={kind} onChange={(k) => setKind(selectedId, k)} />
-            {kind === "dual-synth" ? (
+            <DeviceSelector
+              kind={kind}
+              onChange={(k) => {
+                setKind(selectedId, k);
+                // PERF: Initialiser le mapping drum immédiatement pour activer l'éditeur DrumClip
+                if (k === "drum-machine") {
+                  try { useDrumMachineStore.getState().setMapping(selectedId, {}); } catch {}
+                }
+              }}
+            />
+            {kind === "drum-machine" ? (
+              <DrumMachinePanel trackId={selectedId} />
+            ) : kind === "sampler" ? (
+              <DrumsRack trackId={selectedId} />
+            ) : kind === "dual-synth" ? (
               <DualSynthPanel trackId={selectedId} />
             ) : (
               <SimpleSynthPanel trackId={selectedId} />
@@ -83,7 +99,7 @@ const LiveMidiSection = ({ trackId }: { trackId: string }) => {
   );
 };
 
-const DeviceSelector = ({ trackId, kind, onChange }: { trackId: string; kind: "simple-synth" | "dual-synth" | "sampler"; onChange: (k: InstrumentKind) => void }) => {
+const DeviceSelector = ({ kind, onChange }: { kind: "simple-synth" | "dual-synth" | "sampler" | "drum-machine"; onChange: (k: InstrumentKind) => void }) => {
   return (
     <div className="rounded-sm border border-neutral-700 bg-neutral-900 p-2">
       <div className="mb-1 text-[10px] uppercase tracking-widest text-neutral-400">Device</div>
@@ -94,7 +110,8 @@ const DeviceSelector = ({ trackId, kind, onChange }: { trackId: string; kind: "s
       >
         <option value="simple-synth">Simple Synth</option>
         <option value="dual-synth">Dual Osc Synth</option>
-        <option value="sampler" disabled>Sampler (bientôt)</option>
+        <option value="sampler">Drums Rack (Sampler)</option>
+        <option value="drum-machine">Drum Machine</option>
       </select>
     </div>
   );

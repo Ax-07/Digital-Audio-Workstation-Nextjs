@@ -29,7 +29,7 @@ const AppShellComponent = () => {
   return (
     <div className="flex h-screen flex-col bg-neutral-900 text-neutral-200">
       {/* Header */}
-        <DevPerfPanel />
+        {/* <DevPerfPanel /> */}
       <header className="border-b border-neutral-700 bg-neutral-800 px-3">
         <HeaderTransport />
       </header>
@@ -54,7 +54,7 @@ const AppShellComponent = () => {
         <AccordionItem value="item-1">
           <AccordionTrigger className="flex items-center justify-center bg-neutral-700"/>
           <AccordionContent> */}
-            <footer className="border-t border-neutral-700 bg-neutral-900 p-3">
+            <footer className="relative z-50 border-t border-neutral-700 bg-neutral-900 p-3">
               <BottomPanel />
             </footer>
           {/* </AccordionContent>
