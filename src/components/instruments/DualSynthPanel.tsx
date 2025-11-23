@@ -35,7 +35,7 @@ const DualSynthPanelComponent = ({ trackId }: Props) => {
   const params = useDualSynthStore((s) => s.getParams(trackId));
   const setParams = useDualSynthStore((s) => s.setParams);
   const set = useCallback(
-    (p: Partial<import("@/lib/audio/sources/dual-osc-synth").DualSynthParams>) => setParams(trackId, p),
+    (p: Partial<import("@/lib/audio/sources/synth/dual-osc-synth").DualSynthParams>) => setParams(trackId, p),
     [setParams, trackId]
   );
 

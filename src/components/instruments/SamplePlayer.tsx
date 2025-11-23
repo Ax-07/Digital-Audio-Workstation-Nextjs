@@ -3,7 +3,7 @@
 import { memo, useCallback, useRef, useState } from "react";
 import { useMixerStore } from "@/lib/stores/mixer.store";
 import { AudioEngine } from "@/lib/audio/core/audio-engine";
-import { SampleSource } from "@/lib/audio/sources/sample-source";
+import { SampleSource } from "@/lib/audio/sources/sampler/sample-source";
 
 const sampleMap = new Map<string, SampleSource>();
 

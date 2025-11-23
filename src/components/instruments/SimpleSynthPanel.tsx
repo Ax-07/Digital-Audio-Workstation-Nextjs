@@ -5,6 +5,7 @@ import { useSynthStore } from "@/lib/stores/synth.store";
 import { Slider } from "../ui/slider";
 import { ensureMidiTrack } from "@/lib/audio/sources/midi-track";
 import { GenericEnvelopeEditor } from "../fx/GenericEnvelope";
+import { SimpleSynthParams } from "@/lib/audio/sources/synth/simple-synth";
 
 type Props = { trackId: string };
 
@@ -37,7 +38,7 @@ const SimpleSynthPanelComponent = ({ trackId }: Props) => {
   const setParams = useSynthStore((s) => s.setParams);
 
   const set = useCallback(
-    (p: Partial<import("@/lib/audio/sources/simple-synth").SimpleSynthParams>) => setParams(trackId, p),
+    (p: Partial<SimpleSynthParams>) => setParams(trackId, p),
     [setParams, trackId]
   );
   // ampEnv est garanti par le store (DEFAULT) → pas de fallback local
