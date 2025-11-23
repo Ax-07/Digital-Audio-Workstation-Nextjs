@@ -1,0 +1,242 @@
+"use client";
+
+import { memo, useCallback, useMemo, useState } from "react";
+import { useUiStore } from "@/lib/stores/ui.store";
+import { useProjectStore } from "@/lib/stores/project.store";
+import type { GridValue, MidiNote } from "@/lib/audio/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DrumRoll } from "./DrumRoll";
+import { AudioEngine } from "@/lib/audio/core/audio-engine";
+import { getSessionPlayer } from "@/lib/audio/core/session-player";
+
+export const DrumClipEditor = memo(function DrumClipEditor() {
+  // UI selection courante (trackId, sceneIndex)
+  const selected = useUiStore((s) => s.selectedClip);
+  // const playingCells = useUiStore((s) => s.playingCells);
+
+  // Projet (clip courant)
+  const session = useProjectStore((s) => s.project.session);
+  const renameClip = useProjectStore((s) => s.renameClip);
+  const updateClipLoop = useProjectStore((s) => s.updateClipLoop);
+  const updateClipLength = useProjectStore((s) => s.updateMidiClipLength);
+  const updateMidiClipNotes = useProjectStore((s) => s.updateMidiClipNotes);
+  const setClipStartOffset = useProjectStore((s) => s.setClipStartOffset);
+
+  const [grid, setGrid] = useState<GridValue>(16);
+
+  const clip = useMemo(() => {
+    if (!selected) return null;
+    const sc = session?.scenes?.[selected.sceneIndex];
+    if (!sc) return null;
+    return sc.clips[selected.trackId] ?? null;
+  }, [session, selected]);
+
+  const midiClip = useMemo(() => (clip && clip.type === "midi" ? clip : null), [clip]);
+  const lengthBeats = midiClip?.lengthBeats ?? 4;
+  const position = clip?.startOffset ?? (clip?.loopStart ?? 0);
+  const loop = clip && clip.loopStart != null && clip.loopEnd != null ? { start: clip.loopStart, end: clip.loopEnd } : null;
+
+  const [localName, setLocalName] = useState(clip?.name ?? "");
+
+  // Sync nom local
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const _ = useMemo(() => { setLocalName(clip?.name ?? ""); return null; }, [clip?.name]);
+
+  const onNotesChange = useCallback(
+    (notes: MidiNote[]) => {
+      if (!selected) return;
+      updateMidiClipNotes(selected.trackId, selected.sceneIndex, notes);
+    },
+    [selected, updateMidiClipNotes]
+  );
+
+  const onLengthChange = useCallback(
+    (beats: number) => {
+      if (!selected) return;
+      updateClipLength(selected.trackId, selected.sceneIndex, beats);
+    },
+    [selected, updateClipLength]
+  );
+
+  const handleLoopStartChange = useCallback(
+    (value: number) => {
+      if (!selected || !clip) return;
+      const end = clip.loopEnd ?? lengthBeats;
+      updateClipLoop(selected.trackId, selected.sceneIndex, { start: value, end });
+    },
+    [clip, lengthBeats, selected, updateClipLoop]
+  );
+
+  const handleLoopEndChange = useCallback(
+    (value: number) => {
+      if (!selected || !clip) return;
+      const start = clip.loopStart ?? 0;
+      updateClipLoop(selected.trackId, selected.sceneIndex, { start, end: value });
+    },
+    [clip, selected, updateClipLoop]
+  );
+
+  const handlePositionChange = useCallback(
+    (value: number) => {
+      if (!selected) return;
+      const safe = Number.isFinite(value) ? value : 0;
+      setClipStartOffset(selected.trackId, selected.sceneIndex, safe);
+    },
+    [selected, setClipStartOffset]
+  );
+
+  if (!selected || !clip) {
+    return (
+      <section className="flex gap-2 h-60">
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-xs text-muted-foreground">Aucun clip sélectionné</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (!midiClip) {
+    return (
+      <section className="flex gap-2 h-60">
+        <Card className="flex-1 bg-neutral-900/50 border-neutral-800">
+          <div className="h-full flex items-center justify-center">
+            <p className="text-xs text-muted-foreground">Clip non MIDI</p>
+          </div>
+        </Card>
+      </section>
+    );
+  }
+
+  const preview = useCallback(async (pitch: number) => {
+    try {
+      const eng = AudioEngine.ensure();
+      await eng.init();
+      await eng.resume();
+      const sp = getSessionPlayer();
+      const mt = await sp.getMidiTrackForPreview(selected.trackId);
+      mt.noteOn(pitch, 0.9, false);
+    } catch {}
+  }, [selected?.trackId]);
+  
+  // const isPlaying = !!playingCells[`${selected.trackId}:${selected.sceneIndex}`];
+
+
+  return (
+    <section id="drum-clip" className="flex gap-2 h-60">
+      {/* Panneau gauche (mêmes contrôles essentiels que l’éditeur MIDI) */}
+      <Card className="w-52 py-1 flex flex-col bg-neutral-900/50 border-neutral-800 overflow-y-auto">
+        <CardContent className="p-2 pt-0 flex flex-col gap-2 text-xs">
+          <div className="space-y-0.5">
+            <Label htmlFor="clip-name" className="text-[9px] text-muted-foreground sr-only">Nom</Label>
+            <Input
+              id="clip-name"
+              value={localName}
+              onChange={(e) => setLocalName(e.target.value)}
+              onBlur={() => renameClip(selected.trackId, selected.sceneIndex, localName)}
+              className="h-6 text-[10px] bg-neutral-950/50 px-2"
+              placeholder="Nom du clip"
+            />
+          </div>
+
+          <Separator className="bg-neutral-800 my-0.5" />
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <div className="space-y-0.5">
+              <Label htmlFor="position" className="text-[9px] text-muted-foreground">Pos</Label>
+              <Input
+                id="position"
+                type="number"
+                className="h-6 text-[10px] bg-neutral-950/50 px-1.5"
+                value={position}
+                step={0.25}
+                onChange={(e) => handlePositionChange(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-0.5">
+              <Label htmlFor="clip-length" className="text-[9px] text-muted-foreground">Long</Label>
+              <Input
+                id="clip-length"
+                type="number"
+                className="h-6 text-[10px] bg-neutral-950/50 px-1.5"
+                value={lengthBeats}
+                step={1}
+                onChange={(e) => onLengthChange(Number(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <div className="space-y-0.5">
+              <Label htmlFor="loop-start" className="text-[9px] text-muted-foreground">L.Start</Label>
+              <Input
+                id="loop-start"
+                type="number"
+                className="h-6 text-[10px] bg-neutral-950/50 px-1.5"
+                value={loop?.start ?? 0}
+                step={0.25}
+                onChange={(e) => handleLoopStartChange(Number(e.target.value))}
+                disabled={!loop}
+              />
+            </div>
+            <div className="space-y-0.5">
+              <Label htmlFor="loop-end" className="text-[9px] text-muted-foreground">L.End</Label>
+              <Input
+                id="loop-end"
+                type="number"
+                className="h-6 text-[10px] bg-neutral-950/50 px-1.5"
+                value={loop?.end ?? lengthBeats}
+                step={0.25}
+                onChange={(e) => handleLoopEndChange(Number(e.target.value))}
+                disabled={!loop}
+              />
+            </div>
+          </div>
+
+          <Separator className="bg-neutral-800 my-0.5" />
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Select value={String(grid)} onValueChange={(v) => setGrid(Number(v) as GridValue)}>
+                <SelectTrigger id="grid-select" className="h-6 text-[10px] bg-neutral-950/50" size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="4">1/4</SelectItem>
+                  <SelectItem value="8">1/8</SelectItem>
+                  <SelectItem value="12">1/8T</SelectItem>
+                  <SelectItem value="16">1/16</SelectItem>
+                  <SelectItem value="24">1/16T</SelectItem>
+                  <SelectItem value="32">1/32</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant={loop ? "default" : "outline"}
+                className="h-5 px-2 text-[9px] shrink-0"
+                onClick={() => updateClipLoop(selected.trackId, selected.sceneIndex, loop ? null : { start: 0, end: 4 })}
+              >
+                Loop
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Zone principale : Drum Roll grid */}
+      <Card className="flex-1 bg-neutral-900/50 border-neutral-800 overflow-hidden">
+        <DrumRoll
+          notes={midiClip.notes as MidiNote[]}
+          lengthBeats={lengthBeats}
+          grid={grid}
+          onChange={onNotesChange}
+          onPreview={preview}
+        />
+      </Card>
+    </section>
+  );
+});
