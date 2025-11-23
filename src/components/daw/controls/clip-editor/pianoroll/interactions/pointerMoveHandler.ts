@@ -81,6 +81,13 @@ export type PointerMoveHandlerCtx = {
   };
 };
 
+// Cache global du dernier DOMRect de canvas capturé au pointerDown.
+// Mis à jour via setCanvasRectCache depuis pointerHandlers.
+let _canvasRectCache: DOMRect | null = null;
+export function setCanvasRectCache(rect: DOMRect) {
+  _canvasRectCache = rect;
+}
+
 export function createPointerMoveHandlerCtx(ctx: PointerMoveHandlerCtx) {
   const {
     refs: { canvas, draft, render, interaction, loopState },
@@ -111,11 +118,12 @@ export function createPointerMoveHandlerCtx(ctx: PointerMoveHandlerCtx) {
     },
     external: { audio },
   } = ctx;
-
   return (e: MouseEvent<HTMLCanvasElement>) => {
     const cvs = canvas.current;
     if (!cvs) return;
-    const rect = cvs.getBoundingClientRect();
+    // Utilise le cache (précis capturé au pointerDown) et fallback périodique si absent ou invalide.
+    let rect = _canvasRectCache;
+    if (!rect) rect = cvs.getBoundingClientRect();
     const xCss = e.clientX - rect.left;
     const yCss = e.clientY - rect.top;
 

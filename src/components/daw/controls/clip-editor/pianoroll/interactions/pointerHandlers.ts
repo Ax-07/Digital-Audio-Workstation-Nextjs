@@ -2,6 +2,7 @@
 
 import type { MouseEvent } from "react";
 import { getHitAt } from "./hit";
+import { setCanvasRectCache } from "./pointerMoveHandler";
 import type { DragMode, DraftNote, InteractionState } from "../types";
 import type { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { GridValue } from "@/lib/audio/types";
@@ -61,6 +62,8 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
     const cvs = canvas.current;
     if (!cvs) return;
     const rect = cvs.getBoundingClientRect();
+    // Met à jour le cache rect pour déplacements ultérieurs (pointerMove) sans recalcul layout.
+    setCanvasRectCache(rect);
     const xCss = e.clientX - rect.left;
     const yCss = e.clientY - rect.top;
     const hit = getHitAt(
