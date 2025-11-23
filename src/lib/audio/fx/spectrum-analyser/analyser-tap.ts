@@ -1,5 +1,5 @@
 // src/lib/audio/effects/spectrum-analyser/analyser-tap.ts
-import type { AudioEffect } from "@/lib/audio/effects/base";
+import type { AudioEffect } from "@/lib/audio/fx/base";
 
 export type AnalyserTapParams = {
   fftSize: 256 | 512 | 1024 | 2048 | 4096 | 8192;
