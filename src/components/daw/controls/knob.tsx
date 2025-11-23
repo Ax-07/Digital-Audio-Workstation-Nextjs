@@ -2,16 +2,52 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
+/**
+ * Props du Knob
+ * @property {string} label Libellé du knob (sous le contrôle)
+ * @property {number} value Valeur actuelle du knob
+ * @property {number} min Valeur minimale du knob
+ * @property {number} max Valeur maximale du knob
+ * @property {number} [step] Pas de variation du knob (défaut: 1)
+ * @property {(v: number) => string} [display] Fonction de formatage de l’affichage de la valeur
+ * @property {(v: number) => void} onChange Fonction appelée lors du changement de valeur
+ */
 type KnobProps = {
+  /**Libellé du knob (sous le contrôle) */
   label: string;
+  /** Valeur actuelle du knob */
   value: number;
+  /** Valeur minimale et maximale du knob */
   min: number;
+  /** Valeur maximale du knob */
   max: number;
+  /** Pas de variation du knob (défaut: 1) */
   step?: number;
+  /**
+   * Fonction de formatage de l’affichage de la valeur
+   * @param v 
+   * @returns 
+   */
   display?: (v: number) => string;
+  /**
+   * Fonction appelée lors du changement de valeur
+   * @param v 
+   * @returns 
+   */
   onChange: (v: number) => void;
 };
 
+/**
+ * Knob — petit contrôle rotatif
+ * @param label Libellé du knob (sous le contrôle)
+ * @param value Valeur actuelle du knob
+ * @param min Valeur minimale du knob
+ * @param max Valeur maximale du knob
+ * @param step Pas de variation du knob (défaut: 1)
+ * @param display Fonction de formatage de l’affichage de la valeur
+ * @param onChange Fonction appelée lors du changement de valeur
+ * @returns JSX.Element
+ */
 const Knob: React.FC<KnobProps> = ({
   label,
   value,
