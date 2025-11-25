@@ -10,7 +10,6 @@ export type PointerUpHandlerCtx = {
     interaction: React.RefObject<InteractionState>;
   };
   state: {
-    dragMode: DragMode;
     loopState: { start: number; end: number } | null;
   };
   clip: {
@@ -39,7 +38,7 @@ export type PointerUpHandlerCtx = {
 export function createPointerUpHandlerCtx(ctx: PointerUpHandlerCtx) {
   const {
     refs: { draft, interaction },
-    state: { dragMode, loopState },
+    state: { loopState },
     clip: { trackId },
     callbacks: { setSelected, setDragMode, emitFrom, onLoopChange, invalidate },
     external: { audio },
@@ -47,6 +46,7 @@ export function createPointerUpHandlerCtx(ctx: PointerUpHandlerCtx) {
 
   return () => {
     const inter = interaction.current;
+    const dragMode = inter.dragMode;
 
     // 1) Stop preview clavier (si une note est en cours)
     stopKeyboardPreview(trackId, interaction);

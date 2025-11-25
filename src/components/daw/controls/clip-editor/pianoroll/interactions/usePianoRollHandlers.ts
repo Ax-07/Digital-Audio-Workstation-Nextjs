@@ -362,6 +362,9 @@ export function usePianoRollHandlers(input: PianoRollHandlersInput): PianoRollHa
       if (!onChange) return;
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selected.length > 0) {
+          // Éviter que le navigateur intercepte Backspace (navigate back, etc.)
+          e.preventDefault();
+          e.stopPropagation();
           const sel = new Set(selected);
           const next = draft.current.filter((_n, i) => !sel.has(i));
           emitFrom(next);

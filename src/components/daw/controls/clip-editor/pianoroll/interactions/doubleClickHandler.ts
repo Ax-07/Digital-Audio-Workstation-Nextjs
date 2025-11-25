@@ -1,6 +1,6 @@
 // src/components/daw/controls/clip-editor/pianoroll/interactions/doubleClickHandler.ts
 
-import type { MouseEvent } from "react";
+import type { PointerEvent  } from "react";
 import { getHitAt } from "./hit";
 import type { GridValue } from "@/lib/audio/types";
 import type { DraftNote } from "../types";
@@ -41,7 +41,7 @@ export function createDoubleClickHandler(ctx: DoubleClickHandlerCtx) {
     state: { grid, loop, loopState },
   } = ctx;
 
-  return (e: MouseEvent<HTMLCanvasElement>) => {
+  return (e: PointerEvent <HTMLCanvasElement>) => {
     const cvs = canvas.current;
     if (!cvs) return;
 

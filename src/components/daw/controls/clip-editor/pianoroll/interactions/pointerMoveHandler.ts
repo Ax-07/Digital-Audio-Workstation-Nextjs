@@ -1,6 +1,6 @@
 // src/components/daw/controls/clip-editor/pianoroll/interactions/pointerMoveHandler.ts
 
-import type { MouseEvent } from "react";
+import type { PointerEvent  } from "react";
 import { getHitAt } from "./hit";
 import type {
   DragMode,
@@ -118,7 +118,7 @@ export function createPointerMoveHandlerCtx(ctx: PointerMoveHandlerCtx) {
     },
     external: { audio },
   } = ctx;
-  return (e: MouseEvent<HTMLCanvasElement>) => {
+  return (e: PointerEvent <HTMLCanvasElement>) => {
     const cvs = canvas.current;
     if (!cvs) return;
     // Utilise le cache (précis capturé au pointerDown) et fallback périodique si absent ou invalide.

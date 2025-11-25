@@ -1,12 +1,11 @@
 // src/components/daw/controls/clip-editor/pianoroll/interactions/pointerHandlers.ts
 
-import type { MouseEvent } from "react";
+import type { PointerEvent  } from "react";
 import { getHitAt } from "./hit";
 import { setCanvasRectCache } from "./pointerMoveHandler";
 import type { DragMode, DraftNote, InteractionState } from "../types";
 import type { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { GridValue } from "@/lib/audio/types";
-import { getSessionPlayer } from "@/lib/audio/core/session-player";
 import { startKeyboardPreview } from "./keyboardPreview";
 
 // ================= New grouped context type (additive) =================
@@ -49,6 +48,11 @@ export type PointerDownHandlerCtx = {
   };
 };
 
+/**
+ * Créateur de gestionnaire pour le pointer down dans le pianoroll.
+ * @param ctx Contexte groupé pour le handler.
+ * @returns Fonction de gestion du pointer down.
+ */
 export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
   const {
     refs: { canvas, draft, interaction },
@@ -58,7 +62,7 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
     callbacks: { setSelected, setDragMode, draw, onPositionChange, onLengthChange },
     external: { audio },
   } = ctx;
-  return (e: MouseEvent<HTMLCanvasElement>) => {
+  return (e: PointerEvent<HTMLCanvasElement>) => {
     const cvs = canvas.current;
     if (!cvs) return;
     const rect = cvs.getBoundingClientRect();
@@ -87,6 +91,7 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
       draw();
       return;
     }
+    // Déplacement de note
     if (hit.type === "note" && typeof hit.noteIndex === "number") {
       const idx = hit.noteIndex;
       if (!selected.includes(idx)) setSelected([idx]);
@@ -94,6 +99,7 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
       interaction.current.pointerStart = { x: xCss, y: yCss, noteIndex: idx, initial: draft.current.slice() };
       return;
     }
+    // Resize de note
     if (hit.type === "resize" && typeof hit.noteIndex === "number") {
       const idx = hit.noteIndex;
       if (!selected.includes(idx)) setSelected([idx]);
@@ -101,18 +107,21 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
       interaction.current.pointerStart = { x: xCss, y: yCss, noteIndex: idx, initial: draft.current.slice() };
       return;
     }
+    // Déplace le start d'une loop
     if (hit.type === "loopStart") {
       const current = loop ?? loopState ?? { start: 0, end: lengthBeats };
       interaction.current.loopDrag = { kind: "start", x0: xCss, initial: { ...current } };
       setDragMode("loopStart");
       return;
     }
+    // Déplace la fin d'une loop
     if (hit.type === "loopEnd") {
       const current = loop ?? loopState ?? { start: 0, end: lengthBeats };
       interaction.current.loopDrag = { kind: "end", x0: xCss, initial: { ...current } };
       setDragMode("loopEnd");
       return;
     }
+    // Déplace toute la loop
     if (hit.type === "loopBar") {
       const current = loop ?? loopState;
       if (current) {
@@ -125,11 +134,13 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
         }
       }
     }
+    // Resize de la longueur du clip
     if (hit.type === "clipLength") {
       interaction.current.pointerStart = { x: xCss, y: yCss, noteIndex: null, initial: draft.current.slice(), initialLength: lengthBeats };
       setDragMode("resizeClip");
       return;
     }
+    // Déplace la position de départ de lecture du clip
     if (hit.type === "positionStart") {
       interaction.current.pointerStart = { x: xCss, y: yCss, noteIndex: null, initial: draft.current.slice() };
       setDragMode("setPlayhead");
@@ -137,6 +148,7 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
       draw();
       return;
     }
+    // Rectangle selection
     if (hit.type === "empty" && yCss >= topBarHeight) {
       interaction.current.rectangleSelection = { x0: xCss, y0: yCss, x1: xCss, y1: yCss };
       setDragMode("rectangleSelection");
