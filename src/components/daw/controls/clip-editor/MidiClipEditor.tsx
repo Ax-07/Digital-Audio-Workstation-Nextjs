@@ -415,7 +415,7 @@ export const MidiClipEditor = memo(function MidiClipEditor() {
                 position={position}
                 getPlayheadBeat={localPlayheadBeat !== null ? () => localPlayheadBeat : undefined}
                 followPlayhead={isPlaying}
-                active={isPlaying}
+                isPlaying={isPlaying}
                 grid={grid}
                 snap={snap}
                 onSeek={onSeekTransport}
