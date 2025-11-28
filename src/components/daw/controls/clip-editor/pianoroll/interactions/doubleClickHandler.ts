@@ -1,7 +1,7 @@
 // src/components/daw/controls/clip-editor/pianoroll/interactions/doubleClickHandler.ts
 
-import type { PointerEvent  } from "react";
-import { getHitAt } from "./hit";
+import type { PointerEvent } from "react";
+import { hitTest } from "./hit";
 import type { GridValue } from "@/lib/audio/types";
 import type { DraftNote } from "../types";
 
@@ -32,7 +32,7 @@ export type DoubleClickHandlerCtx = {
   };
 };
 
-export function createDoubleClickHandler(ctx: DoubleClickHandlerCtx) {
+export function createDoubleClickHandlerCtx(ctx: DoubleClickHandlerCtx) {
   const {
     refs: { canvas, draft },
     callbacks: { setSelected, emitFrom },
@@ -41,7 +41,7 @@ export function createDoubleClickHandler(ctx: DoubleClickHandlerCtx) {
     state: { grid, loop, loopState },
   } = ctx;
 
-  return (e: PointerEvent <HTMLCanvasElement>) => {
+  return (e: PointerEvent<HTMLCanvasElement>) => {
     const cvs = canvas.current;
     if (!cvs) return;
 
@@ -49,50 +49,95 @@ export function createDoubleClickHandler(ctx: DoubleClickHandlerCtx) {
     const xCss = e.clientX - rect.left;
     const yCss = e.clientY - rect.top;
 
-    const hit = getHitAt(
+    const hit = hitTest({
       xCss,
       yCss,
-      draft.current,
+      notes: draft.current,
       timeToX,
       pitchToY,
       yToPitch,
       pxPerSemitone,
       keyWidth,
       topBarHeight,
-      loop ?? loopState,
-      undefined,  // positionStart
-      undefined   // clipLength
-      // getNotesForPitch non utilisé ici
-    );
+      loop: loop ?? loopState,
+      // positionStart: undefined,
+      // clipLength: undefined,
+    });
 
     // --- Double click on a note → remove it ---
     if (hit.type === "note" && typeof hit.noteIndex === "number") {
-      const idx = hit.noteIndex;
-      const next = draft.current.filter((_n, i) => i !== idx);
-      setSelected([]);
-      emitFrom(next);
+      handleDeleteNote({ draft, setSelected, emitFrom, noteIndex: hit.noteIndex });
       return;
     }
 
     // --- Double click on empty area → create a note ---
     if (hit.type === "empty" && xCss >= keyWidth) {
-      const beat = xToTime(xCss);
-      const step = 1 / grid;
-      const pitch = yToPitch(yCss);
-
-      const newNote: DraftNote = {
-        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
-        pitch,
-        time: Math.max(0, Math.floor(beat / step) * step),
-        duration: step,
-        velocity: 0.8,
-        __id: Date.now(),
-      };
-
-      const next = [...draft.current, newNote];
-      setSelected([next.length - 1]);
-      emitFrom(next);
+      handleCreateNote({
+        draft,
+        setSelected,
+        emitFrom,
+        xCss,
+        yCss,
+        xToTime,
+        yToPitch,
+        grid,
+      });
       return;
     }
   };
 }
+
+type DeleteNoteArgs = {
+  draft: React.RefObject<DraftNote[]>;
+  setSelected: (value: number[]) => void;
+  emitFrom: (arr: DraftNote[]) => void;
+  noteIndex: number;
+};
+
+export const handleDeleteNote = ({ draft, setSelected, emitFrom, noteIndex }: DeleteNoteArgs) => {
+  const cur = draft.current;
+  if (!cur) return;
+  const next = cur.filter((_n, i) => i !== noteIndex);
+  setSelected([]);
+  emitFrom(next);
+};
+
+type CreateNoteArgs = {
+  draft: React.RefObject<DraftNote[]>;
+  setSelected: (value: number[]) => void;
+  emitFrom: (arr: DraftNote[]) => void;
+  xCss: number;
+  yCss: number;
+  xToTime: (xCss: number) => number;
+  yToPitch: (yCss: number) => number;
+  grid: GridValue;
+};
+
+export const handleCreateNote = ({
+  draft,
+  setSelected,
+  emitFrom,
+  xCss,
+  yCss,
+  xToTime,
+  yToPitch,
+  grid,
+}: CreateNoteArgs) => {
+  const cur = draft.current ?? [];
+  const beat = xToTime(xCss);
+  const step = 1 / grid;
+  const pitch = yToPitch(yCss);
+
+  const newNote: DraftNote = {
+    id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+    pitch,
+    time: Math.max(0, Math.floor(beat / step) * step),
+    duration: step,
+    velocity: 0.8,
+    __id: Date.now(),
+  };
+
+  const next = [...cur, newNote];
+  setSelected([next.length - 1]);
+  emitFrom(next);
+};

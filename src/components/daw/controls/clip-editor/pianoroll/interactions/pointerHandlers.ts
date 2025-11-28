@@ -1,8 +1,7 @@
 // src/components/daw/controls/clip-editor/pianoroll/interactions/pointerHandlers.ts
 
 import type { PointerEvent  } from "react";
-import { getHitAt } from "./hit";
-import { setCanvasRectCache } from "./pointerMoveHandler";
+import { hitTest } from "./hit";
 import type { DragMode, DraftNote, InteractionState } from "../types";
 import type { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { GridValue } from "@/lib/audio/types";
@@ -49,6 +48,53 @@ export type PointerDownHandlerCtx = {
 };
 
 /**
+ * Commence un drag de notes ou de clip.
+ * @param interaction React.RefObject<InteractionState>
+ * @param xCss Le déplacement horizontal initial en pixels CSS.
+ * @param yCss Le déplacement vertical initial en pixels CSS.
+ * @param draft React.RefObject<DraftNote[]>
+ * @param options Options additionnelles.
+ */
+function beginPointerDrag(
+  interaction: React.RefObject<InteractionState>,
+  xCss: number,
+  yCss: number,
+  draft: React.RefObject<DraftNote[]>,
+  options: {
+    noteIndex: number | null;
+    initialLength?: number;
+  } = { noteIndex: null },
+) {
+  interaction.current.pointerStart = {
+    x: xCss,
+    y: yCss,
+    noteIndex: options.noteIndex,
+    initial: draft.current.slice(),
+    initialLength: options.initialLength,
+  };
+}
+
+/**
+ * Commence un drag de loop (start, end, move).
+ * @param interaction React.RefObject<InteractionState>
+ * @param kind "start" | "end" | "move"
+ * @param xCss Le déplacement horizontal initial en pixels CSS.
+ * @param loop L'état actuel de la loop.
+ */
+function beginLoopDrag(
+  interaction: React.RefObject<InteractionState>,
+  kind: "start" | "end" | "move",
+  xCss: number,
+  loop: { start: number; end: number },
+) {
+  interaction.current.loopDrag = {
+    kind,
+    x0: xCss,
+    initial: { ...loop },
+  };
+}
+
+/**
  * Créateur de gestionnaire pour le pointer down dans le pianoroll.
  * @param ctx Contexte groupé pour le handler.
  * @returns Fonction de gestion du pointer down.
@@ -58,32 +104,32 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
     refs: { canvas, draft, interaction },
     state: { selected, loopState, loop, lengthBeats, positionStart },
     geometry: { timeToX, pitchToY, xToTime, yToPitch, pxPerSemitone, keyWidth, topBarHeight },
-    clip: { grid, trackId },
-    callbacks: { setSelected, setDragMode, draw, onPositionChange, onLengthChange },
+    clip: { trackId },
+    callbacks: { setSelected, setDragMode, draw, onPositionChange },
     external: { audio },
   } = ctx;
   return (e: PointerEvent<HTMLCanvasElement>) => {
     const cvs = canvas.current;
     if (!cvs) return;
     const rect = cvs.getBoundingClientRect();
+    interaction.current.canvasRectCache = rect;
     // Met à jour le cache rect pour déplacements ultérieurs (pointerMove) sans recalcul layout.
-    setCanvasRectCache(rect);
     const xCss = e.clientX - rect.left;
     const yCss = e.clientY - rect.top;
-    const hit = getHitAt(
+    const hit = hitTest({
       xCss,
       yCss,
-      draft.current,
+      notes: draft.current,
       timeToX,
       pitchToY,
-      (yLocal) => yToPitch(yLocal),
+      yToPitch,
       pxPerSemitone,
       keyWidth,
       topBarHeight,
-      loop ?? loopState,
+      loop: loop ?? loopState,
       positionStart,
-      lengthBeats
-    );
+      clipLength: lengthBeats,
+    });
     // note preview
     if (hit.type === "keyboard") {
       const pitch = yToPitch(yCss);
@@ -96,7 +142,7 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
       const idx = hit.noteIndex;
       if (!selected.includes(idx)) setSelected([idx]);
       setDragMode("move");
-      interaction.current.pointerStart = { x: xCss, y: yCss, noteIndex: idx, initial: draft.current.slice() };
+      beginPointerDrag(interaction, xCss, yCss, draft, { noteIndex: idx });
       return;
     }
     // Resize de note
@@ -104,21 +150,21 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
       const idx = hit.noteIndex;
       if (!selected.includes(idx)) setSelected([idx]);
       setDragMode("resize");
-      interaction.current.pointerStart = { x: xCss, y: yCss, noteIndex: idx, initial: draft.current.slice() };
+      beginPointerDrag(interaction, xCss, yCss, draft, { noteIndex: idx });
       return;
     }
     // Déplace le start d'une loop
     if (hit.type === "loopStart") {
       const current = loop ?? loopState ?? { start: 0, end: lengthBeats };
-      interaction.current.loopDrag = { kind: "start", x0: xCss, initial: { ...current } };
       setDragMode("loopStart");
+      beginLoopDrag(interaction, "start", xCss, current);
       return;
     }
     // Déplace la fin d'une loop
     if (hit.type === "loopEnd") {
       const current = loop ?? loopState ?? { start: 0, end: lengthBeats };
-      interaction.current.loopDrag = { kind: "end", x0: xCss, initial: { ...current } };
       setDragMode("loopEnd");
+      beginLoopDrag(interaction, "end", xCss, current);
       return;
     }
     // Déplace toute la loop
@@ -128,21 +174,21 @@ export function createPointerDownHandlerCtx(ctx: PointerDownHandlerCtx) {
         const xStart = timeToX(current.start);
         const xEnd = timeToX(current.end);
         if (xCss >= xStart && xCss <= xEnd && yCss <= topBarHeight) {
-          interaction.current.loopDrag = { kind: "move", x0: xCss, initial: { ...current } };
           setDragMode("loopMove");
+          beginLoopDrag(interaction, "move", xCss, current);
           return;
         }
       }
     }
     // Resize de la longueur du clip
     if (hit.type === "clipLength") {
-      interaction.current.pointerStart = { x: xCss, y: yCss, noteIndex: null, initial: draft.current.slice(), initialLength: lengthBeats };
       setDragMode("resizeClip");
+      beginPointerDrag(interaction, xCss, yCss, draft, { noteIndex: null, initialLength: lengthBeats });
       return;
     }
     // Déplace la position de départ de lecture du clip
     if (hit.type === "positionStart") {
-      interaction.current.pointerStart = { x: xCss, y: yCss, noteIndex: null, initial: draft.current.slice() };
+      beginPointerDrag(interaction, xCss, yCss, draft, { noteIndex: null });
       setDragMode("setPlayhead");
       onPositionChange?.(Math.max(0, Math.min(lengthBeats, xToTime(xCss))));
       draw();

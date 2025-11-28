@@ -14,6 +14,6 @@ export {
 export type { PointerUpHandlerCtx } from "./pointerUpHandler";
 
 export {
-  createDoubleClickHandler,
+  createDoubleClickHandlerCtx as createDoubleClickHandler,
 } from "./doubleClickHandler";
 export type { DoubleClickHandlerCtx } from "./doubleClickHandler";

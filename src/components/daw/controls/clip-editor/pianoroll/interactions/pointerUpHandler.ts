@@ -77,6 +77,7 @@ export function createPointerUpHandlerCtx(ctx: PointerUpHandlerCtx) {
     inter.pointerStart = null;
     inter.rectangleSelection = null;
     inter.dragGuide = null;
+    inter.canvasRectCache = null;
 
     // 6) Sort du mode de drag + redraw
     setDragMode(null);

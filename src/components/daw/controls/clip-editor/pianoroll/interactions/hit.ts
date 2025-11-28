@@ -14,8 +14,60 @@ export type Hit =
   | { type: "positionStart" }
   | { type: "clipLength" };
 
+export type HitTestParams = {
+  xCss: number;
+  yCss: number;
+  notes: ReadonlyArray<DraftNote>;
+  timeToX: (beat: number) => number;
+  pitchToY: (pitch: number) => number;
+  yToPitch: (yCss: number) => number;
+  pxPerSemitone: number;
+  keyWidth: number;
+  topBarHeight: number;
+  loop: { start: number; end: number } | null;
+  positionStart?: number;
+  clipLength?: number;
+  getNotesForPitch?: (pitch: number) => ReadonlyArray<NoteRef>;
+};
+
 const RESIZE_EDGE_PX = 12; // Tolérance en pixels pour le hit-test de resize sur le bord droit d'une note
 
+/**
+ * Wrapper plus lisible autour de getHitAt, avec paramètres nommés.
+ */
+export function hitTest(params: HitTestParams): Hit {
+  const {
+    xCss,
+    yCss,
+    notes,
+    timeToX,
+    pitchToY,
+    yToPitch,
+    pxPerSemitone,
+    keyWidth,
+    topBarHeight,
+    loop,
+    positionStart,
+    clipLength,
+    getNotesForPitch,
+  } = params;
+
+  return getHitAt(
+    xCss,
+    yCss,
+    notes,
+    timeToX,
+    pitchToY,
+    yToPitch,
+    pxPerSemitone,
+    keyWidth,
+    topBarHeight,
+    loop,
+    positionStart,
+    clipLength,
+    getNotesForPitch,
+  );
+}
 /**
  * getHitAt
  *
@@ -124,7 +176,7 @@ export function getHitAt(
     return hitFromIndexed;
   }
 
-// Fallback : scan complet des notes (reverse order pour z-index, dernières notes dessinées au-dessus)
+  // Fallback : scan complet des notes (reverse order pour z-index, dernières notes dessinées au-dessus)
   for (let i = notes.length - 1; i >= 0; i--) {
     const n = notes[i]!;
     const nx = timeToX(n.time);
