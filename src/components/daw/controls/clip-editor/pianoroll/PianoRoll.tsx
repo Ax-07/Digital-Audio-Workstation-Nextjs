@@ -38,16 +38,16 @@ import { useThrottle } from "./hooks/useThrottle";
 import { useOverlayTicker } from "./hooks/useOverlayTicker";
 
 export const PianoRoll = memo(function PianoRoll({
-  notes,
-  lengthBeats = 4,
-  onChange,
-  onDraftChange,
-  loop,
-  onLoopChange,
-  position,
-  onPositionChange,
-  onLengthChange,
-  active = false,
+  notes,                      // liste des notes (time, pitch, duration, velocity, etc.)
+  lengthBeats = 4,            // longueur du clip en beats (par défaut 4)
+  onChange,                   // callback quand les notes sont modifiées
+  onDraftChange,              // callback pendant le drag / preview
+  loop,                       // boucle { start, end } ou null
+  onLoopChange,               // callback quand la boucle change  
+  position,                   // position de départ du clip en beats (offset de lecture)
+  onPositionChange,           // callback quand la position change
+  onLengthChange,             // callback quand la longueur du clip change
+  isPlaying = false,          // indique si le clip est en lecture
   followPlayhead = true,
   // contrôles optionnels
   grid: gridProp,
@@ -67,10 +67,6 @@ export const PianoRoll = memo(function PianoRoll({
   const audio = useAudioEngine();
   const scheduler = useTransportScheduler();
 
-  useEffect(() => {
-    console.log("🎼 PianoRoll - trackId updated:", trackId);
-  }, [trackId]);
-
   // ========== State refs ==========
   const interactionRef = useRef<InteractionState>({
     pressedKey: null,
@@ -84,6 +80,7 @@ export const PianoRoll = memo(function PianoRoll({
     selected: [],
     dragMode: null,
     cursor: "default",
+    canvasRectCache: null
   });
 
   const draftRef = useRef<DraftNote[]>([]);
@@ -116,7 +113,7 @@ export const PianoRoll = memo(function PianoRoll({
 
   const overlayCtxRef = useRef<OverlayContext>({
     dpr: 1,
-    active,
+    active: isPlaying,
     position,
     playheadBeat: undefined,
     lengthBeats,
@@ -181,7 +178,7 @@ export const PianoRoll = memo(function PianoRoll({
     setLoopState,
     loopStateRef,
     emitLoopChangeThrottled: loopEmitThrottled,
-  } = useLoopState(loop, onLoopChange, active, 80);
+  } = useLoopState(loop, onLoopChange, isPlaying, 80);
 
   const totalPxX = lengthBeats * pxPerBeat;
   const topBarHeight = 36;
@@ -214,7 +211,7 @@ export const PianoRoll = memo(function PianoRoll({
 
   // ========== Helpers : playhead clip-local ==========
   const getClipPlayheadBeat = useCallback(() => {
-    if (!active) return null;
+    if (!isPlaying) return null;
 
     const globalBeat = scheduler.getBeatFloat();
     if (!Number.isFinite(globalBeat)) return null;
@@ -229,7 +226,7 @@ export const PianoRoll = memo(function PianoRoll({
     const relative = globalBeat + (pos - ls);
     const phase = ((relative % loopLen) + loopLen) % loopLen;
     return ls + phase;
-  }, [active, scheduler, loop, lengthBeats, position]);
+  }, [isPlaying, scheduler, loop, lengthBeats, position]);
 
   // ========== Sync notes ==========
   useEffect(() => {
@@ -292,7 +289,7 @@ export const PianoRoll = memo(function PianoRoll({
   }, [getClipPlayheadBeat, drawOverlay]);
 
   // Overlay ticker (60 fps) pendant la lecture
-  useOverlayTicker(active, drawOverlayWithPlayhead, 60);
+  useOverlayTicker(isPlaying, drawOverlayWithPlayhead, 60);
 
   // ========== Render context ==========
   useEffect(() => {
@@ -323,11 +320,11 @@ export const PianoRoll = memo(function PianoRoll({
 
     const overlay = overlayCtxRef.current;
     overlay.dpr = dpr;
-    overlay.active = active;
+    overlay.active = isPlaying;
     overlay.position = position;
     overlay.lengthBeats = lengthBeats;
     overlay.timeToX = timeToX;
-  }, [dpr, keyWidth, scrollX, scrollY, pxPerBeat, pxPerSemitone, minPitch, maxPitch, grid, lengthBeats, position, selected, loop, loopState, timeToX, xToTime, pitchToY, yToPitch, active]);
+  }, [dpr, keyWidth, scrollX, scrollY, pxPerBeat, pxPerSemitone, minPitch, maxPitch, grid, lengthBeats, position, selected, loop, loopState, timeToX, xToTime, pitchToY, yToPitch, isPlaying]);
 
   // ========== Draw scheduler ==========
   const invalidate = useDrawScheduler(drawFnRef);
@@ -347,7 +344,7 @@ export const PianoRoll = memo(function PianoRoll({
 
   // ========== Emission des notes ==========
   const { emitDraftThrottled, emitFrom } = useMidiEmitters({
-    active,
+    active: isPlaying,
     onDraftChange,
     onChange,
     draftRef,
@@ -374,7 +371,7 @@ export const PianoRoll = memo(function PianoRoll({
 
   // ========== Auto-follow (sans React pour le playhead) ==========
   useAutoFollow(
-    active,
+    isPlaying,
     followPlayhead,
     getClipPlayheadBeat,
     timeToX,
