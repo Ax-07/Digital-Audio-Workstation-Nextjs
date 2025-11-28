@@ -39,7 +39,7 @@ export const KICK_DEFAULT: KickParams = {
   noiseHpHz: 2000,
 }
 
-export const KICK_909: Partial<KickParams> = {
+export const KICK_909: KickParams = {
   level: 0.9,
   pitchStartHz: 95,
   pitchEndHz: 45,
