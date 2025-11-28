@@ -15,6 +15,7 @@ import {
   launchClip as launchClipController,
   stopTrackQuantized,
 } from "@/lib/controllers/session.controller";
+import { MidiNote } from "@/lib/audio/types";
 
 export type SessionGridProps = {
   scenes?: number; // number of rows (scenes)
@@ -208,12 +209,7 @@ export const SessionGrid = memo(function SessionGrid({
                 // Slot vraiment vide (aucun clip + pas de handlers) → bouton "+ MIDI" pour tester
                 if (!clip && (finalProps.state ?? "empty") === "empty" && !finalProps.onClick) {
                   finalProps.onClick = () => {
-                    const notes = [
-                      { id: "note1", pitch: 60, time: 0, duration: 0.95, velocity: 0.85 },
-                      { id: "note2", pitch: 64, time: 1, duration: 0.95, velocity: 0.85 },
-                      { id: "note3", pitch: 67, time: 2, duration: 0.95, velocity: 0.85 },
-                      { id: "note4", pitch: 72, time: 3, duration: 0.95, velocity: 0.85 },
-                    ];
+                    const notes: MidiNote[] = [];
                     createMidiClip(trackId, r, notes, "MIDI Test");
                   };
                   finalProps.label = finalProps.label ?? "+ MIDI";
