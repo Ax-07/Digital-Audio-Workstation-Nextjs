@@ -45,3 +45,24 @@ export type DrawState = {
   dragGuide: { xCss: number; yCss: number; beat: number; pitch: number } | null;
   pointerStart: { x: number; y: number; noteIndex: number | null; initial: DraftNote[] } | null;
 };
+
+/**
+ * Met à jour le contexte de rendu avec de nouvelles valeurs.
+ * @param renderCtx 
+ * @param updates 
+ */
+export function updateRenderCtx(
+  renderCtx: RenderContext,
+  updates: Partial<RenderContext>
+) {
+  Object.assign(renderCtx, updates);
+}
+
+export function commitRenderChangesAndDraw(
+  renderCtx: RenderContext,
+  updates: Partial<RenderContext>,
+  draw: () => void
+) {
+  updateRenderCtx(renderCtx, updates);
+  draw();
+}
