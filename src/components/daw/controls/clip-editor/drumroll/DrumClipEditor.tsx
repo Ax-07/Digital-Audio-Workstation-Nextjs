@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState, useEffect } from "react";
 import { useUiStore } from "@/lib/stores/ui.store";
 import { useProjectStore } from "@/lib/stores/project.store";
 import type { GridValue, MidiNote } from "@/lib/audio/types";
@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DrumRoll } from "./DrumRoll";
 import { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { getSessionPlayer } from "@/lib/audio/core/session-player";
+import { buildMetalTuning, buildRockTuning } from "@/lib/audio/sources/drums/drum-machine/tuning-presets";
+import { drumMachine } from "@/lib/audio/sources/drums/drum-machine/drum-machine";
 
 export const DrumClipEditor = memo(function DrumClipEditor() {
   // UI selection courante (trackId, sceneIndex)
@@ -28,6 +30,7 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
   const setClipStartOffset = useProjectStore((s) => s.setClipStartOffset);
 
   const [grid, setGrid] = useState<GridValue>(16);
+const [tuningValue, setTuningValue] = useState<string | undefined>(undefined);
 
   const clip = useMemo(() => {
     if (!selected) return null;
@@ -38,14 +41,19 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
 
   const midiClip = useMemo(() => (clip && clip.type === "midi" ? clip : null), [clip]);
   const lengthBeats = midiClip?.lengthBeats ?? 4;
-  const position = clip?.startOffset ?? (clip?.loopStart ?? 0);
-  const loop = clip && clip.loopStart != null && clip.loopEnd != null ? { start: clip.loopStart, end: clip.loopEnd } : null;
+  const position = clip?.startOffset ?? clip?.loopStart ?? 0;
+  const loop =
+    clip && clip.loopStart != null && clip.loopEnd != null ? { start: clip.loopStart, end: clip.loopEnd } : null;
 
   const [localName, setLocalName] = useState(clip?.name ?? "");
 
-  // Sync nom local
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const _ = useMemo(() => { setLocalName(clip?.name ?? ""); return null; }, [clip?.name]);
+  // Sync nom local (async to avoid sync setState-in-effect warning)
+  useEffect(() => {
+    const name = clip?.name ?? "";
+    // schedule update to next tick to avoid cascading renders in the current phase
+    const t = window.setTimeout(() => setLocalName(name), 0);
+    return () => clearTimeout(t);
+  }, [clip?.name]);
 
   const onNotesChange = useCallback(
     (notes: MidiNote[]) => {
@@ -90,6 +98,23 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
     [selected, setClipStartOffset]
   );
 
+  const selectedTrackId = selected?.trackId;
+
+  const preview = useCallback(
+    async (pitch: number) => {
+      try {
+        if (!selectedTrackId) return;
+        const eng = AudioEngine.ensure();
+        await eng.init();
+        await eng.resume();
+        const sp = getSessionPlayer();
+        const mt = await sp.getMidiTrackForPreview(selectedTrackId);
+        mt.noteOn(pitch, 0.9, false);
+      } catch {}
+    },
+    [selectedTrackId]
+  );
+
   if (!selected || !clip) {
     return (
       <section className="flex gap-2 h-60">
@@ -112,27 +137,17 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
     );
   }
 
-  const preview = useCallback(async (pitch: number) => {
-    try {
-      const eng = AudioEngine.ensure();
-      await eng.init();
-      await eng.resume();
-      const sp = getSessionPlayer();
-      const mt = await sp.getMidiTrackForPreview(selected.trackId);
-      mt.noteOn(pitch, 0.9, false);
-    } catch {}
-  }, [selected?.trackId]);
-  
   // const isPlaying = !!playingCells[`${selected.trackId}:${selected.sceneIndex}`];
 
-
   return (
-    <section id="drum-clip" className="flex gap-2 h-60">
+    <section id="drum-clip" className="flex flex-1 gap-2 h-60">
       {/* Panneau gauche (mêmes contrôles essentiels que l’éditeur MIDI) */}
       <Card className="w-52 py-1 flex flex-col bg-neutral-900/50 border-neutral-800 overflow-y-auto">
         <CardContent className="p-2 pt-0 flex flex-col gap-2 text-xs">
           <div className="space-y-0.5">
-            <Label htmlFor="clip-name" className="text-[9px] text-muted-foreground sr-only">Nom</Label>
+            <Label htmlFor="clip-name" className="text-[9px] text-muted-foreground sr-only">
+              Nom
+            </Label>
             <Input
               id="clip-name"
               value={localName}
@@ -147,7 +162,9 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
 
           <div className="grid grid-cols-2 gap-1.5">
             <div className="space-y-0.5">
-              <Label htmlFor="position" className="text-[9px] text-muted-foreground">Pos</Label>
+              <Label htmlFor="position" className="text-[9px] text-muted-foreground">
+                Pos
+              </Label>
               <Input
                 id="position"
                 type="number"
@@ -158,7 +175,9 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
               />
             </div>
             <div className="space-y-0.5">
-              <Label htmlFor="clip-length" className="text-[9px] text-muted-foreground">Long</Label>
+              <Label htmlFor="clip-length" className="text-[9px] text-muted-foreground">
+                Long
+              </Label>
               <Input
                 id="clip-length"
                 type="number"
@@ -172,7 +191,9 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
 
           <div className="grid grid-cols-2 gap-1.5">
             <div className="space-y-0.5">
-              <Label htmlFor="loop-start" className="text-[9px] text-muted-foreground">L.Start</Label>
+              <Label htmlFor="loop-start" className="text-[9px] text-muted-foreground">
+                L.Start
+              </Label>
               <Input
                 id="loop-start"
                 type="number"
@@ -184,7 +205,9 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
               />
             </div>
             <div className="space-y-0.5">
-              <Label htmlFor="loop-end" className="text-[9px] text-muted-foreground">L.End</Label>
+              <Label htmlFor="loop-end" className="text-[9px] text-muted-foreground">
+                L.End
+              </Label>
               <Input
                 id="loop-end"
                 type="number"
@@ -218,17 +241,49 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
                 size="sm"
                 variant={loop ? "default" : "outline"}
                 className="h-5 px-2 text-[9px] shrink-0"
-                onClick={() => updateClipLoop(selected.trackId, selected.sceneIndex, loop ? null : { start: 0, end: 4 })}
+                onClick={() =>
+                  updateClipLoop(selected.trackId, selected.sceneIndex, loop ? null : { start: 0, end: 4 })
+                }
               >
                 Loop
               </Button>
             </div>
+            <Select
+              value={tuningValue}
+              onValueChange={(v) => {
+                if (!selected) return;
+
+                // v du genre "rock:48" ou "metal:50"
+                const [mode, noteStr] = v.split(":");
+                const root = Number(noteStr);
+
+                try {
+                  applyTuning(selected.trackId, root, mode === "metal" ? "metal" : "rock");
+                } catch (e) {
+                  console.error("Error applying tuning", e);
+                }
+
+                setTuningValue(undefined); // reset placeholder
+              }}
+            >
+              <SelectTrigger id="tuning-presets-select" className="h-6 text-[10px] bg-neutral-950/50">
+                <SelectValue placeholder="Tuning Presets" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="rock:48">Rock – C (Do)</SelectItem>
+                <SelectItem value="rock:50">Rock – D (Ré)</SelectItem>
+                <SelectItem value="rock:55">Rock – G (Sol)</SelectItem>
+                <SelectItem value="metal:48">Metal – C (Do)</SelectItem>
+                <SelectItem value="metal:50">Metal – D (Ré)</SelectItem>
+                <SelectItem value="metal:55">Metal – G (Sol)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
 
       {/* Zone principale : Drum Roll grid */}
-      <Card className="flex-1 bg-neutral-900/50 border-neutral-800 overflow-hidden">
+      <Card className="w-full bg-neutral-900/50 border-neutral-800 overflow-hidden">
         <DrumRoll
           notes={midiClip.notes as MidiNote[]}
           lengthBeats={lengthBeats}
@@ -240,3 +295,11 @@ export const DrumClipEditor = memo(function DrumClipEditor() {
     </section>
   );
 });
+
+type TuningMode = "rock" | "metal";
+
+function applyTuning(trackId: string, rootNote: number, mode: TuningMode) {
+  const patch = mode === "metal" ? buildMetalTuning(rootNote) : buildRockTuning(rootNote);
+
+  drumMachine.setTrackPreset(trackId, patch);
+}
