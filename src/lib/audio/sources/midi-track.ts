@@ -36,6 +36,7 @@ import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
 import type { InstrumentKind } from "@/lib/audio/types";
 import { drumMachine } from "@/lib/audio/drum-machine/drum-machine";
 import { useDrumMachineStore } from "@/lib/stores/drum-machine.store";
+import { DrumInstrument } from "../drum-machine/types";
 
 export class MidiTrack {
   readonly id: string;
@@ -110,7 +111,7 @@ export class MidiTrack {
   cancelPending(): void {
     try {
       this.activeStop?.();
-    } catch {}
+    } catch { }
     this.activeStop = null;
   }
 
@@ -126,10 +127,10 @@ export class MidiTrack {
     if (!engine.initialized) {
       engine.init().then(() => {
         this.ensureRouting();
-      }).catch(() => {});
+      }).catch(() => { });
       return;
     }
-    
+
     const mix = MixerCore.ensure();
     mix.ensureTrack(this.id);
     this.destination = mix.getTrackInput(this.id);
@@ -221,8 +222,8 @@ export class MidiTrack {
       if (!ctx) return;
       const when = ctx.currentTime;
       // DrumMachine gère son propre routing vers MixerCore via trackId
-      try { void drumMachine.ensure(); } catch {}
-      try { drumMachine.playSound(inst, vel127, when, this.id); } catch {}
+      try { void drumMachine.ensure(); } catch { }
+      try { drumMachine.playSound(inst, vel127, when, this.id); } catch { }
     }
   }
 
@@ -408,24 +409,71 @@ export class MidiTrack {
   }
 
   /** Map MIDI pitch to a drum instrument */
-  private mapPitchToDrum(pitch: number): "kick" | "snare" | "hh" {
+  private mapPitchToDrum(pitch: number): DrumInstrument {
     // Track-level configurable mapping (fallback to GM-like defaults)
     try {
       const map = useDrumMachineStore.getState().getMapping(this.id);
       if (map.kick.includes(pitch)) return "kick";
       if (map.snare.includes(pitch)) return "snare";
+      if (map.tomLow && map.tomLow.includes(pitch)) return "tomLow";
+      if (map.tomMid && map.tomMid.includes(pitch)) return "tomMid";
+      if (map.tomHigh && map.tomHigh.includes(pitch)) return "tomHigh";
+      if (map.tomFloor && map.tomFloor.includes(pitch)) return "tomFloor";
+      // If an open-hat mapping exists, prefer it over closed hh
+      // (common GM: 46 = open hi-hat)
+      if (map.hhOpen && map.hhOpen.includes(pitch)) return "hhOpen";
       if (map.hh.includes(pitch)) return "hh";
     } catch {}
-    // Defaults
-    if (pitch === 36 || pitch === 35) return "kick";
-    if (pitch === 38 || pitch === 40) return "snare";
-    return "hh";
+    switch (pitch) {
+      case 36:
+      case 35:
+        return "kick";
+      case 38:
+      case 40:
+        return "snare";
+      case 41:
+        return "tomLow";
+      case 43:
+        return "tomFloor";
+      case 45:
+        return "tomMid";
+      case 46:
+        return "hhOpen";
+      case 48:
+        return "tomHigh";
+      case 49:
+        return "crash1";
+      case 52:
+        return "china";
+      case 51:
+        return "ride";
+      case 53:
+        return "rideBell";
+      case 55:
+        return "splash";
+      case 57:
+        return "crash2";
+      
+      default:
+        return "hh";
+    }
+        // // Defaults (GM-like / project defaults)
+        // if (pitch === 36 || pitch === 35) return "kick";
+        // if (pitch === 38 || pitch === 40) return "snare";
+        // // common open hi-hat default
+        // // common tom defaults (fallbacks)
+        // if (pitch === 41) return "tomLow";
+        // if (pitch === 43) return "tomFloor";
+        // if (pitch === 45) return "tomMid";
+        // if (pitch === 46) return "hhOpen";
+        // if (pitch === 48) return "tomHigh";
+        // return "hh";
+    }
   }
-}
 
-/* ---------------- Cache global pour éviter de recréer des pistes ---------------- */
+  /* ---------------- Cache global pour éviter de recréer des pistes ---------------- */
 
-const _midiTrackCache: Map<string, MidiTrack> = new Map();
+  const _midiTrackCache: Map<string, MidiTrack> = new Map();
 
 /**
  * ensureMidiTrack()

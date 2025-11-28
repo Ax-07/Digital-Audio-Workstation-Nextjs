@@ -15,12 +15,32 @@ import { getEnvelopeTotalSec } from "@/lib/audio/envelopes/generic-envelope";
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Noms des notes MIDI (C à B).
+ */
+export const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+/**
  * Conversion pitch MIDI → fréquence Hz.
  * Référence : 69 = A4 = 440 Hz.
  * Formule : f = 440 * 2^((pitch - 69) / 12)
  */
 export function midiToFreq(pitch: number): number {
   return 440 * Math.pow(2, (pitch - 69) / 12);
+}
+
+/** 
+ * Conversion fréquence Hz → pitch MIDI.
+ * Référence : 69 = A4 = 440 Hz.
+ */
+export function freqToMidi(freqHz: number): number {
+  return Math.round(69 + 12 * Math.log2(freqHz / 440));
+}
+
+export function midiToName(note: number): string {
+  const n = Math.round(note);
+  const name = NOTE_NAMES[(n + 1200) % 12];
+  const octave = Math.floor(n / 12) - 1;
+  return `${name}${octave}`;
 }
 
 /* -------------------------------------------------------------------------- */
