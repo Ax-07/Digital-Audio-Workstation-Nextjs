@@ -11,6 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KickEditorModule } from "@/lib/audio/sources/drums/drum-machine/kick/kick-editor";
 import { SnareEditorModule } from "@/lib/audio/sources/drums/drum-machine/snare/snare-editor";
 import { HiHatEditorModule } from "@/lib/audio/sources/drums/drum-machine/hi-hat/hi-hat-editor";
+import OpenHiHatEditorModule from "@/lib/audio/sources/drums/drum-machine/hi-hat/hi-hat-open-editor";
+import { TomEditorModule } from "@/lib/audio/sources/drums/drum-machine/tom/tom-editor";
+import Crash1EditorModule from "@/lib/audio/sources/drums/drum-machine/crash/crash1-editor";
+import ChinaEditorModule from "@/lib/audio/sources/drums/drum-machine/china/china-editor";
 
 export function DrumMachinePanel({ trackId }: { trackId: string }) {
   // preview utilitaire (actuellement non utilisé car boutons masqués)
@@ -130,6 +134,13 @@ export function DrumMachinePanel({ trackId }: { trackId: string }) {
             <TabsTrigger value="kick">Kick</TabsTrigger>
             <TabsTrigger value="snare">Snare</TabsTrigger>
             <TabsTrigger value="hh">Hi-Hat</TabsTrigger>
+            <TabsTrigger value="hhOpen">Open Hi-Hat</TabsTrigger>
+            <TabsTrigger value="tomL">Tom L</TabsTrigger>
+            <TabsTrigger value="tomH">Tom H</TabsTrigger>
+            <TabsTrigger value="tomM">Tom Mid</TabsTrigger>
+            <TabsTrigger value="tomF">Tom Floor</TabsTrigger>
+            <TabsTrigger value="crash1">Crash 1</TabsTrigger>
+            <TabsTrigger value="china">China</TabsTrigger>
           </TabsList>
           <TabsContent value="kick">
             <KickEditorModule trackId={trackId} />
@@ -140,6 +151,28 @@ export function DrumMachinePanel({ trackId }: { trackId: string }) {
           <TabsContent value="hh">
             <HiHatEditorModule trackId={trackId} />
           </TabsContent>
+          <TabsContent value="hhOpen">
+            <OpenHiHatEditorModule trackId={trackId} />
+          </TabsContent>
+          <TabsContent value="tomL">
+            <TomEditorModule trackId={trackId} style={"low"} instrument={"tomLow"} label={"Tom Low"} />
+          </TabsContent>
+          <TabsContent value="tomH">
+            <TomEditorModule trackId={trackId} style={"high"} instrument={"tomHigh"} label={"Tom High"} />
+          </TabsContent>
+          <TabsContent value="tomM">
+            <TomEditorModule trackId={trackId} style={"mid"} instrument={"tomMid"} label={"Tom Mid"} />
+          </TabsContent>
+          <TabsContent value="tomF">
+            <TomEditorModule trackId={trackId} style={"floor"} instrument={"tomFloor"} label={"Tom Floor"} />
+          </TabsContent>
+          <TabsContent value="crash1">
+            <Crash1EditorModule trackId={trackId} />
+          </TabsContent>
+          <TabsContent value="china">
+            <ChinaEditorModule trackId={trackId} />
+          </TabsContent>
+
         </Tabs>
       </div>
       <p className="text-[11px] text-neutral-400">
