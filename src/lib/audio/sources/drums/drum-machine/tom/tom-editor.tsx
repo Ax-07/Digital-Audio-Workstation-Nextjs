@@ -2,21 +2,21 @@
 "use client";
 
 import { useState } from "react";
-import { drumMachine, DrumInstrument } from "@/lib/audio/drum-machine/drum-machine";
+import { drumMachine } from "@/lib/audio/drum-machine/drum-machine";
 import { AudioEngine } from "@/lib/audio/core/audio-engine";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DrumWavePreview } from "../DrumWavePreview";
 import Knob from "@/components/daw/controls/knob";
 import { cn } from "@/lib/utils";
-import type { DrumPreset, TomParams, TomStyle } from "../types";
+import type { DrumInstrument, DrumPreset, TomParams, TomStyle } from "../types";
 import { renderTomArray } from "./tom-dsp";
 
 type Props = {
   trackId: string;
   /** "low" | "mid" | "high" | "floor" */
   style: TomStyle;
-  /** "tomLow" | "tomMid" | "tomHigh" | "tomFloor" */
+  /** "low" | "mid" | "high" | "floor" */
   instrument: DrumInstrument;
   label: string;
   className?: string;
