@@ -227,6 +227,11 @@ class SessionPlayer {
     when: number,
     sceneIndex: number
   ): Promise<void> {
+    // DEBUG: tracer quel clip MIDI est lancé (track/clip/pitches)
+    try {
+      const notePitches = (clip.notes ?? []).map((n: MidiNote) => n.pitch).slice(0, 8);
+      console.debug(`[SessionPlayer] launchMidiClip track=${trackId} clip=${clip.id} notes=${(clip.notes||[]).length} samplePitches=${notePitches.join(",")}`);
+    } catch {}
     if (!clip.notes || clip.notes.length === 0) return;
 
     const ctx = AudioEngine.ensure().context;
