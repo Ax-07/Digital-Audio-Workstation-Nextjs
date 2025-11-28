@@ -1,6 +1,7 @@
 // src/components/daw/controls/clip-editor/draw/drawKeyboard.ts
 
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+import { NOTE_NAMES } from "@/lib/audio/sources/synth/synth-utils";
+
 const BLACK_KEYS = [1, 3, 6, 8, 10]; // indices of sharp notes
 
 export type KeyboardDrawOptions = {
