@@ -1,7 +1,7 @@
 // src/lib/audio/core/mixer.ts
 
 import { AudioEngine, dbToGain } from "@/lib/audio/core/audio-engine";
-import { TrackNodeChain } from "@/lib/audio/core/track";
+import { TrackNodeChain } from "@/lib/audio/core/track/track";
 import type { FxDecl } from "@/lib/audio/types";
 
 /**

@@ -15,6 +15,8 @@
    - Si tous se désabonnent -> on stoppe.
 */
 
+import { PerfMonitor } from "@/lib/perf/perf-monitor";
+
 type RafCallback = (t: number) => void;
 
 class GlobalRaf {
@@ -43,13 +45,13 @@ class GlobalRaf {
   subscribe(cb: RafCallback): () => void {
     this.subscribers.add(cb);
     // Perf: enregistrer le nombre d'abonnés (stocké dans lastMs)
-    try { const pm = require("@/lib/perf/perf-monitor").PerfMonitor(); if (pm.isEnabled()) pm.recordDuration("raf.subscribers", this.subscribers.size); } catch {}
+    try { const pm = PerfMonitor(); if (pm.isEnabled()) pm.recordDuration("raf.subscribers", this.subscribers.size); } catch {}
 
     if (!this.running) this.start();
 
     return () => {
       this.subscribers.delete(cb);
-      try { const pm = require("@/lib/perf/perf-monitor").PerfMonitor(); if (pm.isEnabled()) pm.recordDuration("raf.subscribers", this.subscribers.size); } catch {}
+      try { const pm = PerfMonitor(); if (pm.isEnabled()) pm.recordDuration("raf.subscribers", this.subscribers.size); } catch {}
       if (this.subscribers.size === 0) this.stop();
     };
   }
@@ -73,7 +75,6 @@ class GlobalRaf {
 
       // Perf: frame interval & long frames detection
       try {
-        const { PerfMonitor } = require("@/lib/perf/perf-monitor");
         const pm = PerfMonitor();
         if (pm.isEnabled()) {
           const prev = this.lastFrameTs || t;

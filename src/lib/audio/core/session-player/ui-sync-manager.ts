@@ -1,5 +1,6 @@
 // src/lib/audio/core/session-player/ui-sync-manager.ts
 
+import { useUiStore } from "@/lib/stores/ui.store";
 import { calculateDelayMs } from "./helpers";
 
 /**
@@ -36,7 +37,6 @@ export class UISyncManager {
     
     window.setTimeout(async () => {
       try {
-        const { useUiStore } = await import("@/lib/stores/ui.store");
         useUiStore.getState().setTrackPlaying(trackId, sceneIndex);
       } catch {}
     }, Math.round(delayMs));
@@ -50,7 +50,6 @@ export class UISyncManager {
     
     window.setTimeout(async () => {
       try {
-        const { useUiStore } = await import("@/lib/stores/ui.store");
         useUiStore.getState().setTrackPlaying(trackId, null);
       } catch {}
     }, Math.round(delayMs));
@@ -61,7 +60,6 @@ export class UISyncManager {
    */
   async clearPlaying(trackId: string): Promise<void> {
     try {
-      const { useUiStore } = await import("@/lib/stores/ui.store");
       useUiStore.getState().setTrackPlaying(trackId, null);
     } catch {}
   }
@@ -71,7 +69,6 @@ export class UISyncManager {
    */
   async clearAllPlaying(): Promise<void> {
     try {
-      const { useUiStore } = await import("@/lib/stores/ui.store");
       const st = useUiStore.getState();
       st.clearPlaying();
       st.clearScheduled();
@@ -83,7 +80,6 @@ export class UISyncManager {
    */
   async getLaunchMode(): Promise<string | undefined> {
     try {
-      const { useUiStore } = await import("@/lib/stores/ui.store");
       return useUiStore.getState().launchMode;
     } catch {
       return undefined;
@@ -95,7 +91,6 @@ export class UISyncManager {
    */
   async getPlayingCells(): Promise<Record<string, number | boolean | null>> {
     try {
-      const { useUiStore } = await import("@/lib/stores/ui.store");
       return useUiStore.getState().playingCells as Record<string, number | boolean | null>;
     } catch {
       return {};

@@ -3,9 +3,9 @@
 // Objectif: fournir une API stable pour l'UI sans exposer directement MixerCore.
 // PERF: Toutes les méthodes évitent les allocations; pas de création de nouveaux objets de retour.
 
-import { MixerCore } from "@/lib/audio/core/mixer";
 import type { InstrumentOutput } from "@/lib/audio/core/instrument-output";
 import type { FxDecl } from "@/lib/audio/types";
+import { MixerCore } from "../mixer/mixer";
 
 export interface TrackAudioChannel {
   readonly id: string;

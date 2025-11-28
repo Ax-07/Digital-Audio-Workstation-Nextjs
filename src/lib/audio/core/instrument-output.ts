@@ -2,8 +2,8 @@
 // Interface commune pour la sortie d'un instrument vers le mixeur.
 // Objectif: offrir un point d'adaptation sans refactorer immédiatement DrumMachine.
 
-import { MixerCore } from "@/lib/audio/core/mixer";
 import { isTrackChannelV2Enabled, isTrackChannelV2EnabledFor } from "@/lib/audio/core/feature-flags";
+import { MixerCore } from "./mixer/mixer";
 
 /**
  * InstrumentOutput
