@@ -487,12 +487,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         try {
           const kind = useInstrumentStore.getState().getKind(trackId);
           if (kind === "drum-machine") {
-            const makeId = () => `n_${Math.random().toString(36).slice(2, 9)}`;
-            finalNotes = [
-              { id: makeId(), pitch: 36, time: 0, duration: 0.95, velocity: 0.92 }, // Kick
-              { id: makeId(), pitch: 38, time: 1, duration: 0.95, velocity: 0.85 }, // Snare
-              { id: makeId(), pitch: 42, time: 2, duration: 0.95, velocity: 0.78 }, // Hat
-            ];
+            // const makeId = () => `n_${Math.random().toString(36).slice(2, 9)}`;
+            finalNotes = [];
+            console.log("Injecting default drum-machine notes:", finalNotes);
           }
         } catch { /* ignore instrument store access erreurs */ }
       }
