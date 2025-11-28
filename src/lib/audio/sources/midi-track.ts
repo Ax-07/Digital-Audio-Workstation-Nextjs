@@ -21,7 +21,6 @@
  */
 
 import { AudioEngine } from "@/lib/audio/core/audio-engine";
-import { MixerCore } from "@/lib/audio/core/mixer";
 import type { MidiNote } from "@/lib/audio/types";
 import {
   SimpleSynth,
@@ -34,9 +33,10 @@ import {
 import { Sampler } from "@/lib/audio/sources/sampler/sampler";
 import { TransportScheduler } from "@/lib/audio/core/transport-scheduler";
 import type { InstrumentKind } from "@/lib/audio/types";
-import { drumMachine } from "@/lib/audio/drum-machine/drum-machine";
 import { useDrumMachineStore } from "@/lib/stores/drum-machine.store";
-import { DrumInstrument } from "../drum-machine/types";
+import { MixerCore } from "../core/mixer/mixer";
+import { DrumInstrument } from "./drum-machine/types";
+import { drumMachine } from "./drum-machine/drum-machine";
 
 export class MidiTrack {
   readonly id: string;
