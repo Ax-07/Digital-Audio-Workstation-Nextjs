@@ -1,5 +1,4 @@
 // src/lib/audio/drum-machine/drum-machine.ts
-export type DrumInstrument = "kick" | "snare" | "hh"
 
 import { AudioEngine } from "@/lib/audio/core/audio-engine"
 import { isTrackRoutingV2Enabled } from "@/lib/audio/core/instrument-output"
@@ -7,13 +6,17 @@ import type { InstrumentOutput } from "@/lib/audio/core/instrument-output"
 // MixerCore est déjà importé plus haut pour routing; pas besoin de doublon.
 import { MixerCore } from "@/lib/audio/core/mixer"
 import { perfIncrementDrumTrigger } from "@/lib/audio/perf/audio-metrics"
-import type { DrumPreset, DeepPartial } from "@/lib/audio/sources/drums/drum-machine/types"
+import type { DrumPreset, DeepPartial, TomStyle, DrumInstrument } from "@/lib/audio/sources/drums/drum-machine/types"
 import { DEFAULT_PRESET } from "@/lib/audio/sources/drums/drum-machine/presets"
 import { triggerKick } from "@/lib/audio/sources/drums/drum-machine/kick/kick-dsp"
 import { triggerSnare } from "@/lib/audio/sources/drums/drum-machine/snare/snare"
 import { triggerHat } from "@/lib/audio/sources/drums/drum-machine/hi-hat/hi-hat"
 import { dbToGain } from "@/lib/audio/core/audio-engine"
 import type { FxDecl } from "@/lib/audio/types"
+import { triggerTom } from "./tom/tom-dsp"
+import { triggerCrash1, triggerCrash2, triggerRide, triggerRideBell, triggerSplash } from "./crash/crash-dsp"
+import { triggerChina } from "@/lib/audio/sources/drums/drum-machine/china/china-dsp";
+
 
 // (Legacy FX supprimés: warnings et types retirés)
 
@@ -40,12 +43,28 @@ function deepClonePreset(p: DrumPreset): DrumPreset {
  * @returns 
  */
 function mergePreset(base: DrumPreset, patch: DeepPartial<DrumPreset>): DrumPreset {
+  const mergedToms = {
+    low: { ...base.toms.low, ...(patch.toms?.low ?? {}) },
+    mid: { ...base.toms.mid, ...(patch.toms?.mid ?? {}) },
+    high: { ...base.toms.high, ...(patch.toms?.high ?? {}) },
+    floor: { ...base.toms.floor, ...(patch.toms?.floor ?? {}) },
+  }
+
   return {
     kick: { ...base.kick, ...(patch.kick ?? {}) },
     snare: { ...base.snare, ...(patch.snare ?? {}) },
     hh: { ...base.hh, ...(patch.hh ?? {}) },
+    hhOpen: { ...base.hhOpen, ...(patch.hhOpen ?? {}) },
+    toms: mergedToms,
+    crash1: { ...base.crash1, ...(patch.crash1 ?? {}) },
+    crash2: { ...base.crash2, ...(patch.crash2 ?? {}) },
+    ride: { ...base.ride, ...(patch.ride ?? {}) },
+    rideBell: { ...base.rideBell, ...(patch.rideBell ?? {}) },
+    splash: { ...base.splash, ...(patch.splash ?? {}) },
+    china: { ...base.china, ...(patch.china ?? {})}
   }
 }
+
 
 /**
  * Interface interne d'un canal de batterie
@@ -73,7 +92,22 @@ export class DrumMachine {
   /** Gain de sommation interne par piste en mode track (avant track input). */
   private trackModeSumGain: Map<string, GainNode> = new Map()
   /** Compteurs instrumentation basique. */
-  private triggerCounts: Map<string, { kick: number; snare: number; hh: number }> = new Map()
+  private triggerCounts: Map<string, {
+    kick: number;
+    snare: number;
+    hh: number;
+    hhOpen: number;
+    tomLow: number;
+    tomMid: number;
+    tomHigh: number;
+    tomFloor: number;
+    crash1: number;
+    crash2: number;
+    china: number;
+    ride: number;
+    rideBell: number;
+    splash: number;
+  }> = new Map()
   /** Canal minimal cache pour chaque piste trackMode (évite recréations). */
   private trackModeChannels: Map<string, Channel> = new Map()
 
@@ -111,7 +145,7 @@ export class DrumMachine {
       if (chain && (chain as unknown as { panNode?: StereoPannerNode }).panNode) {
         panNode = (chain as unknown as { panNode: StereoPannerNode }).panNode
       } else {
-        panNode = ({ pan: { value: 0 }, connect: () => {} } as unknown as StereoPannerNode)
+        panNode = ({ pan: { value: 0 }, connect: () => { } } as unknown as StereoPannerNode)
       }
       const minimal: Channel = { gain: sum, pan: panNode, mute: false }
       this.trackModeChannels.set(trackId, minimal)
@@ -230,7 +264,25 @@ export class DrumMachine {
 
     // Instrumentation comptage triggers
     let counts = this.triggerCounts.get(trackId)
-    if (!counts) { counts = { kick: 0, snare: 0, hh: 0 }; this.triggerCounts.set(trackId, counts) }
+    if (!counts) {
+      counts = {
+        kick: 0,
+        snare: 0,
+        hh: 0,
+        hhOpen: 0,
+        tomLow: 0,
+        tomMid: 0,
+        tomHigh: 0,
+        tomFloor: 0,
+        crash1: 0,
+        crash2: 0,
+        china: 0,
+        ride: 0,
+        rideBell: 0,
+        splash: 0,
+      }
+      this.triggerCounts.set(trackId, counts)
+    }
 
     switch (instrument) {
       case "kick":
@@ -239,11 +291,45 @@ export class DrumMachine {
       case "snare":
         this.playSnare(ctx, ch, velocity, when, trackId)
         break
+      case "tomLow":
+        this.playTom(ctx, ch, velocity, when, trackId, "low")
+        break
+      case "tomMid":
+        this.playTom(ctx, ch, velocity, when, trackId, "mid")
+        break
+      case "tomHigh":
+        this.playTom(ctx, ch, velocity, when, trackId, "high")
+        break
+      case "tomFloor":
+        this.playTom(ctx, ch, velocity, when, trackId, "floor")
+        break
       case "hh":
-      default:
         this.playHiHat(ctx, ch, velocity, when, trackId)
         break
+      case "hhOpen":              // ✅ open hat
+        this.playHiHatOpen(ctx, ch, velocity, when, trackId);
+        break;
+      case "crash1":
+        this.playCrash1(ctx, ch, velocity, when, trackId)
+        break
+      case "crash2":
+        this.playCrash2(ctx, ch, velocity, when, trackId)
+        break
+      case "ride":
+        this.playRide(ctx, ch, velocity, when, trackId)
+        break
+      case "rideBell":
+        this.playRideBell(ctx, ch, velocity, when, trackId)
+        break
+      case "splash":
+        this.playSplash(ctx, ch, velocity, when, trackId)
+        break
+      case "china":
+        this.playChina(ctx, ch, velocity, when, trackId)
+        break
+      default:
     }
+
   }
 
   private playKick(ctx: AudioContext, ch: Channel, velocity: number, when: number, trackId: string) {
@@ -267,10 +353,91 @@ export class DrumMachine {
     perfIncrementDrumTrigger("hh")
   }
 
-getAudioContext(): AudioContext | null { return this.ctx }
+  private playHiHatOpen(ctx: AudioContext, ch: Channel, velocity: number, when: number, trackId: string) {
+    const preset = this.ensurePreset(trackId);
+    const hatPreset = preset.hhOpen ?? preset.hh; // fallback au closed si pas défini
+    triggerHat(ctx, ch.gain, velocity, when, hatPreset);
+    const c = this.triggerCounts.get(trackId); if (c) c.hhOpen++;
+    // perfIncrementDrumTrigger("hhOpen");
+  }
+
+  private playTom(
+    ctx: AudioContext,
+    ch: Channel,
+    velocity: number,
+    when: number,
+    trackId: string,
+    which: TomStyle,
+  ) {
+    const preset = this.ensurePreset(trackId)
+    const toms = preset.toms
+
+    // Map TomKey to TomsPreset keys
+    const tomKeyMap: Record<TomStyle, keyof typeof toms> = {
+      low: "low",
+      mid: "mid",
+      high: "high",
+      floor: "floor",
+    }
+
+    const params = toms?.[tomKeyMap[which]]
+
+    if (!params) return
+
+    triggerTom(ctx, ch.gain, velocity, when, params)
+
+    const c = this.triggerCounts.get(trackId)
+    if (c) {
+      if (which === "low") c.tomLow++
+      else if (which === "mid") c.tomMid++
+      else if (which === "high") c.tomHigh++
+      else c.tomFloor++
+    }
+
+    // perfIncrementDrumTrigger("tom")
+  }
+
+  private playCrash1(ctx: AudioContext, ch: Channel, velocity: number, when: number, trackId: string) {
+    const preset = this.ensurePreset(trackId)
+    triggerCrash1(ctx, ch.gain, velocity, when, preset.crash1)
+    const c = this.triggerCounts.get(trackId); if (c) c.crash1++
+    // perfIncrementDrumTrigger("crash1")
+  }
+
+  private playChina(ctx: AudioContext, ch: Channel, velocity: number, when: number, trackId: string) {
+    const preset = this.ensurePreset(trackId);
+    triggerChina(ctx, ch.gain, velocity, when, preset.china)
+    const c = this.triggerCounts.get(trackId); if (c) c.china++
+  }
+
+  private playCrash2(ctx: AudioContext, ch: Channel, velocity: number, when: number, trackId: string) {
+    const preset = this.ensurePreset(trackId)
+    triggerCrash2(ctx, ch.gain, velocity, when, preset.crash2)
+    const c = this.triggerCounts.get(trackId); if (c) c.crash2++
+  }
+
+  private playRide(ctx: AudioContext, ch: Channel, velocity: number, when: number, trackId: string) {
+    const preset = this.ensurePreset(trackId)
+    triggerRide(ctx, ch.gain, velocity, when, preset.ride)
+    const c = this.triggerCounts.get(trackId); if (c) c.ride++
+  }
+
+  private playRideBell(ctx: AudioContext, ch: Channel, velocity: number, when: number, trackId: string) {
+    const preset = this.ensurePreset(trackId)
+    triggerRideBell(ctx, ch.gain, velocity, when, preset.rideBell)
+    const c = this.triggerCounts.get(trackId); if (c) c.rideBell++
+  }
+
+  private playSplash(ctx: AudioContext, ch: Channel, velocity: number, when: number, trackId: string) {
+    const preset = this.ensurePreset(trackId)
+    triggerSplash(ctx, ch.gain, velocity, when, preset.splash)
+    const c = this.triggerCounts.get(trackId); if (c) c.splash++
+  }
+
+  getAudioContext(): AudioContext | null { return this.ctx }
 
   getTrackAnalyser(trackId: string, opts?: { fftSize?: number; smoothing?: number; minDb?: number; maxDb?: number }): AnalyserNode | null {
-  // Mode track: créer un analyser passif relié au track input (pré-pan pour simplification).
+    // Mode track: créer un analyser passif relié au track input (pré-pan pour simplification).
     if (this.trackMode.has(trackId) && this.ctx) {
       const mix = MixerCore.ensure();
       const chain = mix.getTrackChain(trackId);
@@ -281,21 +448,21 @@ getAudioContext(): AudioContext | null { return this.ctx }
       if (opts?.minDb !== undefined) an.minDecibels = opts.minDb;
       if (opts?.maxDb !== undefined) an.maxDecibels = opts.maxDb;
       return an;
+    }
+    const ch = this.getOrCreateChannel(trackId)
+    if (!ch || !this.ctx) return null
+    if (!ch.analyser) {
+      const an = this.ctx.createAnalyser()
+      ch.pan.connect(an) // tap post-pan/post-fader
+      ch.analyser = an
+    }
+    const an = ch.analyser
+    if (opts?.fftSize) an.fftSize = Math.min(1024, Math.max(128, opts.fftSize))
+    if (opts?.smoothing !== undefined) an.smoothingTimeConstant = opts.smoothing
+    if (opts?.minDb !== undefined) an.minDecibels = opts.minDb
+    if (opts?.maxDb !== undefined) an.maxDecibels = opts.maxDb
+    return an
   }
-  const ch = this.getOrCreateChannel(trackId)
-  if (!ch || !this.ctx) return null
-  if (!ch.analyser) {
-    const an = this.ctx.createAnalyser()
-    ch.pan.connect(an) // tap post-pan/post-fader
-    ch.analyser = an
-  }
-  const an = ch.analyser
-  if (opts?.fftSize) an.fftSize = Math.min(1024, Math.max(128, opts.fftSize))
-  if (opts?.smoothing !== undefined) an.smoothingTimeConstant = opts.smoothing
-  if (opts?.minDb !== undefined) an.minDecibels = opts.minDb
-  if (opts?.maxDb !== undefined) an.maxDecibels = opts.maxDb
-  return an
-}
 
   /**
    * Retourne (ou crée) un couple d'AnalyserNodes stéréo (L/R) pour une piste.
@@ -358,7 +525,7 @@ getAudioContext(): AudioContext | null { return this.ctx }
 
   /** Retour instrumentation des triggers par piste. */
   getTriggerMetrics(trackId: string) {
-    return this.triggerCounts.get(trackId) ?? { kick: 0, snare: 0, hh: 0 }
+    return this.triggerCounts.get(trackId) ?? { kick: 0, snare: 0, hh: 0, hhOpen: 0, tomLow: 0, tomMid: 0, tomHigh: 0, tomFloor: 0, crash1: 0, crash2: 0, china: 0, ride: 0, rideBell: 0, splash: 0 }
   }
 }
 
@@ -388,7 +555,7 @@ export function createDrumInstrumentOutput(trackId: string): InstrumentOutput {
       // Nettoyage léger: retirer caches minimal channel & sumGain.
       drumMachine["trackModeChannels"].delete(trackId)
       const sum = drumMachine["trackModeSumGain"].get(trackId)
-      if (sum) { try { sum.disconnect() } catch {} }
+      if (sum) { try { sum.disconnect() } catch { } }
       drumMachine["trackModeSumGain"].delete(trackId)
       drumMachine["trackMode"].delete(trackId)
     },

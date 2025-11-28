@@ -161,6 +161,42 @@ export type KickParams = {
   ampDecaySec?: number;          // version en secondes du decay
 };
 
+export type TomStyle = "low" | "mid" | "high" | "floor";
+
+export interface TomParams {
+  // Niveau global
+  level?: number; // 0..1
+
+  // Pitch de base (si pas de sweep)
+  bodyFreqHz?: number; // Hz
+
+  // Sweep de pitch (comme un mini-kick)
+  pitchStartHz?: number; // Hz
+  pitchEndHz?: number; // Hz
+  sweepMs?: number; // durée sweep en ms
+  sweepCurve?: number; // 0..1 (0 = linéaire, 1 = expo très forte)
+
+  // Un peu de "noise" pour le slap / attaque
+  noiseMix?: number; // 0..1 (level relatif du noise)
+  noiseDecayMs?: number; // 10..400
+  noiseHpHz?: number; // Hz, pour filtrer grave
+
+  // Drive/Distortion légère
+  drive?: number; // 1..3
+
+  // Envelope d’amplitude
+  ampAttackMs?: number; // 0..20
+  ampDecayMs?: number; // 80..2000
+  ampAttackSec?: number; // optionnel, compat
+  ampDecaySec?: number; // optionnel, compat
+
+  // Filtre de sortie pour nettoyer les subs
+  hpFreqHz?: number; // 20..200 Hz
+
+  // Tag pour preset / UI
+  style?: TomStyle;
+};
+
 export type SnareParams = {
   // Timbre
   bodyFreqHz?: number;           // résonance "tonale" (ex 180..230)
@@ -206,12 +242,46 @@ export type HatParams = {
   ampDecaySec?: number;
 };
 
-// Preset complet des trois instruments
+export type TomsPreset = {
+  low: TomParams;
+  mid: TomParams;
+  high: TomParams;
+  floor: TomParams;
+};
+
+// Preset complet des instruments
 export type DrumPreset = {
   kick: KickParams;
   snare: SnareParams;
   hh: HatParams;
+  hhOpen: HatParams;
+  toms: TomsPreset;
+
+  crash1: HatParams;
+  crash2: HatParams;
+  ride: HatParams;
+  rideBell: HatParams;
+  splash: HatParams;
+  china: HatParams;
 };
+
+
+export type DrumInstrument =
+  | "kick"
+  | "snare"
+  | "hh"
+  | "hhOpen"
+  | "tomLow"
+  | "tomMid"
+  | "tomHigh"
+  | "tomFloor"
+  | "crash1"
+  | "crash2"
+  | "ride"
+  | "rideBell"
+  | "splash"
+  | "china";
+
 
 // Utilitaire de type partiel profond (pour les patches de preset)
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
