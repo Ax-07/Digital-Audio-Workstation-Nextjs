@@ -1,0 +1,485 @@
+// src/lib/audio/sources/midi-track.ts
+
+/**
+ * MidiTrack
+ * =========
+ * Représente une piste MIDI.
+ *
+ * Rôle :
+ *   - Router l'audio vers le MixerCore
+ *   - Héberger un instrument : SimpleSynth, DualOscSynth ou Sampler
+ *   - Fournir noteOn / noteOff
+ *   - Planifier la lecture d'un clip MIDI (scheduleClip)
+ *
+ * Architecture :
+ *   + MidiTrack
+ *       - SimpleSynth | DualOscSynth | Sampler
+ *       - routing vers MixerCore
+ *       - scheduling via TransportScheduler ou setTimeout (sampler)
+ *
+ * ⚠️ Une piste ne contient qu’un seul instrument actif à la fois.
+ */
+
+import { useDrumMachineStore } from "@/features/daw/state/drum-machine.store";
+import { MixerCore } from "../core/mixer/mixer";
+import { DrumInstrument } from "./drum-machine/types";
+import { drumMachine } from "./drum-machine/drum-machine";
+import { InstrumentKind, MidiNote } from "../types";
+import { SimpleSynth, SimpleSynthParams } from "./synth/simple-synth";
+import { Sampler } from "./sampler/sampler";
+import { DualOscSynth, DualSynthParams } from "./synth/dual-osc-synth";
+import { AudioEngine } from "../core/audio-engine";
+import { TransportScheduler } from "../core/transport-scheduler";
+
+export class MidiTrack {
+  readonly id: string;
+
+  /** Node audio vers lequel la piste se route (track → mixer). */
+  private destination: AudioNode | null = null;
+
+  /** Instrument actuellement actif. */
+  private kind: InstrumentKind = "simple-synth";
+
+  /** Instances des instruments (seul un est actif à la fois). */
+  private synth: SimpleSynth | null = null;
+  private dual: DualOscSynth | null = null;
+  private sampler: Sampler | null = null;
+
+  /**
+   * stop() d’un clip en cours (startClip ou scheduleClip)
+   * Permet au DAW d’arrêter une piste proprement.
+   */
+  private activeStop: (() => void) | null = null;
+
+  /**
+   * Constructeur
+   * ------------
+   * trackId → identifiant unique de la piste dans le DAW.
+   * opts → instrument par défaut + params éventuels.
+   */
+  constructor(
+    trackId: string,
+    opts?: {
+      instrument?: InstrumentKind;
+      synthParams?: SimpleSynthParams | DualSynthParams;
+      sampler?: Sampler;
+    },
+  ) {
+    this.id = trackId;
+
+    // Crée le routing vers MixerCore si nécessaire.
+    this.ensureRouting();
+
+    // Instrument choisi ?
+    if (opts?.instrument) this.kind = opts.instrument;
+
+    // Instancie l’instrument demandé.
+    if (this.kind === "simple-synth") {
+      this.synth = new SimpleSynth(opts?.synthParams as SimpleSynthParams);
+      this.dual = null;
+      this.sampler = null;
+    } else if (this.kind === "dual-synth") {
+      this.dual = new DualOscSynth((opts?.synthParams ?? {}) as DualSynthParams);
+      this.synth = null;
+      this.sampler = null;
+    } else if (this.kind === "sampler") {
+      this.sampler = opts?.sampler ?? null;
+      this.synth = null;
+      this.dual = null;
+    } else if (this.kind === "drum-machine") {
+      // DrumMachine est un singleton externe routé via MixerCore (déjà géré côté DrumMachine)
+      this.synth = null;
+      this.dual = null;
+      this.sampler = null;
+    }
+  }
+
+  /**
+   * cancelPending()
+   * ---------------
+   * Annule uniquement la planification des événements restants (unsubscribe),
+   * sans couper les voix actuellement en train de jouer.
+   * Utile lors d’une réécriture du reste du cycle courant.
+   */
+  cancelPending(): void {
+    try {
+      this.activeStop?.();
+    } catch { }
+    this.activeStop = null;
+  }
+
+  /**
+   * ensureRouting()
+   * ---------------
+   * S'assure que la piste possède bien un input audio dans le Mixer.
+   * Appelé dans le constructeur et dans noteOn().
+   */
+  private ensureRouting(): void {
+    // IMPORTANT: Initialiser l'AudioEngine avant de créer les pistes dans le mixer
+    const engine = AudioEngine.ensure();
+    if (!engine.initialized) {
+      engine.init().then(() => {
+        this.ensureRouting();
+      }).catch(() => { });
+      return;
+    }
+
+    const mix = MixerCore.ensure();
+    mix.ensureTrack(this.id);
+    this.destination = mix.getTrackInput(this.id);
+  }
+
+  /**
+   * setInstrument()
+   * ---------------
+   * Change l’instrument de la piste dynamiquement.
+   * L’ancien instrument est abandonné, le nouveau est instancié.
+   */
+  setInstrument(
+    kind: InstrumentKind,
+    opts?: { synthParams?: SimpleSynthParams; sampler?: Sampler },
+  ): void {
+    this.kind = kind;
+
+    if (kind === "simple-synth") {
+      this.synth = new SimpleSynth(opts?.synthParams);
+      this.sampler = null;
+      this.dual = null;
+    } else if (kind === "dual-synth") {
+      this.dual = new DualOscSynth((opts?.synthParams ?? {}) as DualSynthParams);
+      this.synth = null;
+      this.sampler = null;
+    } else if (kind === "sampler") {
+      this.sampler = opts?.sampler ?? null;
+      this.synth = null;
+      this.dual = null;
+    } else if (kind === "drum-machine") {
+      this.synth = null;
+      this.dual = null;
+      this.sampler = null;
+    }
+  }
+
+  /**
+   * configureSynth()
+   * ----------------
+   * Applique en direct des paramètres d’un SimpleSynth existant.
+   * Utilisé par les panneaux React.
+   */
+  configureSynth(params: SimpleSynthParams): void {
+    if (this.kind === "simple-synth") {
+      if (!this.synth) this.synth = new SimpleSynth(params);
+      else this.synth.configure(params);
+    }
+  }
+
+  /**
+   * configureDual()
+   * ---------------
+   * Même principe mais pour DualOscSynth.
+   */
+  configureDual(params: DualSynthParams): void {
+    if (this.kind === "dual-synth") {
+      if (!this.dual) this.dual = new DualOscSynth(params);
+      else this.dual.configure(params);
+    }
+  }
+
+  /**
+   * noteOn()
+   * --------
+   * Appelé par l'éditeur piano-roll, les pads MIDI, etc.
+   * La piste appelle simplement l'instrument actif.
+   * @param pitch - Note MIDI (0-127)
+   * @param velocity - Vélocité (0.0-1.0)
+   * @param isPreview - Si true, la note est jouée en prévisualisation (pas enregistrée)
+   */
+  noteOn(pitch: number, velocity = 0.8, isPreview = false): void {
+    this.ensureRouting();
+    const dest = this.destination;
+    if (!dest) return;
+
+    if (this.kind === "simple-synth") {
+      if (!this.synth) this.synth = new SimpleSynth();
+      this.synth.noteOn(pitch, velocity, dest, isPreview);
+    } else if (this.kind === "dual-synth") {
+      if (!this.dual) this.dual = new DualOscSynth();
+      this.dual.noteOn(pitch, velocity, dest, isPreview);
+    } else if (this.kind === "sampler") {
+      this.sampler?.trigger(pitch, velocity, dest);
+    } else if (this.kind === "drum-machine") {
+      // Map pitch → instrument (GM-like): 36=kick, 38=snare, 42=hat (fallback hat)
+      const inst = this.mapPitchToDrum(pitch);
+      const vel127 = Math.max(1, Math.min(127, Math.round((velocity ?? 0.8) * 127)));
+      const ctx = AudioEngine.ensure().context;
+      if (!ctx) return;
+      const when = ctx.currentTime;
+      // DrumMachine gère son propre routing vers MixerCore via trackId
+      try { void drumMachine.ensure(); } catch { }
+      try { drumMachine.playSound(inst, vel127, when, this.id); } catch { }
+    }
+  }
+
+  /** noteOff — idem, délégué à l’instrument. */
+  noteOff(pitch: number): void {
+    if (this.kind === "simple-synth") this.synth?.noteOff(pitch);
+    else if (this.kind === "dual-synth") this.dual?.noteOff(pitch);
+  }
+
+  /**
+   * scheduleClip()
+   * --------------
+   * Planifie la lecture d’un clip MIDI.
+   *
+   * 3 cas :
+   *   - SimpleSynth → utilise sa méthode startClip()
+   *   - DualSynth   → scheduling manuel via TransportScheduler
+   *   - Sampler     → scheduling via setTimeout()
+   *
+   * Retourne { stop } pour annuler proprement la lecture.
+   */
+  scheduleClip(
+    clip: {
+      notes: ReadonlyArray<MidiNote>;
+      lengthBeats?: number;
+      loop?: boolean;
+      loopStart?: number;
+      loopEnd?: number;
+      startOffset?: number;
+    },
+    when: number,
+    bpm: number,
+  ): { stop: () => void } {
+    this.ensureRouting();
+
+    const kind = this.kind;
+    switch (kind) {
+      case "dual-synth": {
+        if (!this.dual) this.dual = new DualOscSynth();
+
+        const ctx = AudioEngine.ensure().context;
+        const dest = this.destination;
+        if (!ctx || !dest) return { stop: () => { } };
+
+        const secPerBeat = 60 / bpm;
+        const events = clip.notes.flatMap((n) => [
+          { type: "on" as const, time: when + n.time * secPerBeat, pitch: n.pitch, velocity: n.velocity ?? 0.8 },
+          { type: "off" as const, time: when + (n.time + n.duration) * secPerBeat, pitch: n.pitch },
+        ]);
+        events.sort((a, b) => a.time - b.time);
+
+        const sched = TransportScheduler.ensure();
+        const lookahead = 0.5;
+        let idx = 0;
+
+        const unsub = sched.subscribe(() => {
+          const now = ctx.currentTime;
+          while (idx < events.length && events[idx]!.time <= now + lookahead) {
+            const ev = events[idx]!;
+            try {
+              if (ev.type === "on") this.dual!.noteOn(ev.pitch, ev.velocity, dest);
+              else this.dual!.noteOff(ev.pitch);
+            } catch { }
+            idx++;
+          }
+          if (idx >= events.length) {
+            try { unsub(); } catch { }
+          }
+        });
+
+        const stop = () => { try { unsub(); } catch { } };
+        this.activeStop = stop;
+        return { stop };
+      }
+      case "sampler": {
+        const ctx = AudioEngine.ensure().context;
+        const dest = this.destination;
+        if (!ctx || !dest) return { stop: () => { } };
+
+        const secPerBeat = 60 / bpm;
+        const timers: number[] = [];
+
+        for (const n of clip.notes) {
+          const delayMs = Math.max(0, Math.round((when + n.time * secPerBeat - ctx.currentTime) * 1000));
+          const h = window.setTimeout(() => {
+            try { this.sampler?.trigger(n.pitch, n.velocity ?? 0.8, dest); } catch { }
+          }, delayMs);
+          timers.push(h);
+        }
+
+        const stop = () => { for (const id of timers) { try { window.clearTimeout(id); } catch { } } };
+        this.activeStop = stop;
+        return { stop };
+      }
+      case "simple-synth": {
+        if (!this.synth) this.synth = new SimpleSynth();
+        const ctx = AudioEngine.ensure().context;
+        const dest = this.destination;
+        if (!ctx || !dest) return { stop: () => { } };
+
+        const secPerBeat = 60 / bpm;
+        const events = clip.notes.flatMap(n => ([
+          { type: "on" as const, time: when + n.time * secPerBeat, pitch: n.pitch, velocity: n.velocity ?? 0.8 },
+          { type: "off" as const, time: when + (n.time + n.duration) * secPerBeat, pitch: n.pitch, velocity: 0 },
+        ]));
+        events.sort((a, b) => a.time - b.time);
+
+        let idx = 0;
+        const sched = TransportScheduler.ensure();
+        const lookahead = 0.5;
+
+        const unsub = sched.subscribe(() => {
+          const now = ctx.currentTime;
+          while (idx < events.length && events[idx]!.time <= now + lookahead) {
+            const ev = events[idx]!;
+            try {
+              if (ev.type === "on") this.synth!.noteOn(ev.pitch, ev.velocity, dest);
+              else this.synth!.noteOff(ev.pitch);
+            } catch { }
+            idx++;
+          }
+          if (idx >= events.length) { try { unsub(); } catch { } }
+        });
+
+        const stop = () => { try { unsub(); } catch { } };
+        this.activeStop = stop;
+        return { stop };
+      }
+      case "drum-machine": {
+        const ctx = AudioEngine.ensure().context;
+        if (!ctx) return { stop: () => { } };
+
+        const secPerBeat = 60 / bpm;
+        const events = clip.notes.map(n => ({ time: when + n.time * secPerBeat, pitch: n.pitch, velocity: n.velocity ?? 0.8 }));
+        events.sort((a, b) => a.time - b.time);
+
+        const sched = TransportScheduler.ensure();
+        // FIX: Augmentation du lookahead pour éviter le clamping dans safeWhen (jitter main thread)
+        // 0.1 -> 0.5 (500ms)
+        const lookahead = 0.5;
+        let idx = 0;
+
+        const unsub = sched.subscribe(() => {
+          const now = ctx.currentTime;
+          while (idx < events.length && events[idx]!.time <= now + lookahead) {
+            const ev = events[idx]!;
+            try {
+              const inst = this.mapPitchToDrum(ev.pitch);
+              const vel127 = Math.max(1, Math.min(127, Math.round(ev.velocity * 127)));
+              drumMachine.playSound(inst, vel127, ev.time, this.id);
+            } catch { }
+            idx++;
+          }
+          if (idx >= events.length) { try { unsub(); } catch { } }
+        });
+
+        const stop = () => { try { unsub(); } catch { } };
+        this.activeStop = stop;
+        return { stop };
+      }
+      default:
+        return { stop: () => { } };
+    }
+  }
+
+  /** refreshClip() — hook futur pour recalculer un clip quand les params changent. */
+  refreshClip(): void { }
+
+  /**
+   * stop()
+   * ------
+   * Coupe un clip programmé (SimpleSynth, DualSynth ou Sampler).
+   * Appelé par le transport du DAW.
+   */
+  stop(): void {
+    try {
+      this.activeStop?.();
+    } catch { }
+    this.activeStop = null;
+    // Assure l'arrêt complet des voix en cours (évite doublage au redémarrage)
+    try {
+      if (this.kind === "simple-synth") this.synth?.stopAllVoices();
+      else if (this.kind === "dual-synth") this.dual?.stopAllVoices();
+    } catch { }
+  }
+
+  /** Map MIDI pitch to a drum instrument */
+  private mapPitchToDrum(pitch: number): DrumInstrument {
+    // Track-level configurable mapping (fallback to GM-like defaults)
+    try {
+      const map = useDrumMachineStore.getState().getMapping(this.id);
+      if (map.kick.includes(pitch)) return "kick";
+      if (map.snare.includes(pitch)) return "snare";
+      if (map.tomLow && map.tomLow.includes(pitch)) return "tomLow";
+      if (map.tomMid && map.tomMid.includes(pitch)) return "tomMid";
+      if (map.tomHigh && map.tomHigh.includes(pitch)) return "tomHigh";
+      if (map.tomFloor && map.tomFloor.includes(pitch)) return "tomFloor";
+      // If an open-hat mapping exists, prefer it over closed hh
+      // (common GM: 46 = open hi-hat)
+      if (map.hhOpen && map.hhOpen.includes(pitch)) return "hhOpen";
+      if (map.hh.includes(pitch)) return "hh";
+    } catch {}
+    switch (pitch) {
+      case 36:
+      case 35:
+        return "kick";
+      case 38:
+      case 40:
+        return "snare";
+      case 41:
+        return "tomLow";
+      case 43:
+        return "tomFloor";
+      case 45:
+        return "tomMid";
+      case 46:
+        return "hhOpen";
+      case 48:
+        return "tomHigh";
+      case 49:
+        return "crash1";
+      case 52:
+        return "china";
+      case 51:
+        return "ride";
+      case 53:
+        return "rideBell";
+      case 55:
+        return "splash";
+      case 57:
+        return "crash2";
+      
+      default:
+        return "hh";
+    }
+        // // Defaults (GM-like / project defaults)
+        // if (pitch === 36 || pitch === 35) return "kick";
+        // if (pitch === 38 || pitch === 40) return "snare";
+        // // common open hi-hat default
+        // // common tom defaults (fallbacks)
+        // if (pitch === 41) return "tomLow";
+        // if (pitch === 43) return "tomFloor";
+        // if (pitch === 45) return "tomMid";
+        // if (pitch === 46) return "hhOpen";
+        // if (pitch === 48) return "tomHigh";
+        // return "hh";
+    }
+  }
+
+  /* ---------------- Cache global pour éviter de recréer des pistes ---------------- */
+
+  const _midiTrackCache: Map<string, MidiTrack> = new Map();
+
+/**
+ * ensureMidiTrack()
+ * -----------------
+ * Garantit une instance unique de MidiTrack par trackId.
+ */
+export function ensureMidiTrack(trackId: string): MidiTrack {
+  let mt = _midiTrackCache.get(trackId);
+  if (!mt) {
+    mt = new MidiTrack(trackId);
+    _midiTrackCache.set(trackId, mt);
+  }
+  return mt;
+}
